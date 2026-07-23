@@ -41,8 +41,20 @@
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
 
-  <!-- Ship Windows tesseract CLI next to natives for OCR fallback outside NuGet cache. -->
-  <ItemGroup Condition="Exists('$(NuGetPackageRoot)tesseractocr\5.5.2\x64\tesseract.exe')">
+  <!-- Self-contained single-file when publishing with -r <rid> (CI releases). -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>None</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+  </PropertyGroup>
+
+  <!-- Ship Windows tesseract CLI next to natives for OCR fallback outside NuGet cache.
+       Only for non-single-file / framework-dependent local publishes; OCR also bootstraps at runtime. -->
+  <ItemGroup Condition="'$(PublishSingleFile)' != 'true' And Exists('$(NuGetPackageRoot)tesseractocr\5.5.2\x64\tesseract.exe')">
     <None Include="$(NuGetPackageRoot)tesseractocr\5.5.2\x64\tesseract.exe">
       <Link>x64\tesseract.exe</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

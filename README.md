@@ -77,19 +77,30 @@ dotnet restore
 dotnet run --project src/ClipboardPal.App -c Release
 ```
 
-Publish:
+### Local publish (single-file, self-contained)
+
+Any `-r <rid>` publish produces one executable (native libs extract on first run):
 
 ```bash
-# Windows
-dotnet publish src/ClipboardPal.App -c Release -r win-x64 --self-contained false
-
-# macOS
-dotnet publish src/ClipboardPal.App -c Release -r osx-arm64 --self-contained false
-
-# Linux
-dotnet publish src/ClipboardPal.App -c Release -r linux-x64 --self-contained false
+dotnet publish src/ClipboardPal.App -c Release -r win-x64 -o publish/win-x64
+dotnet publish src/ClipboardPal.App -c Release -r win-x86 -o publish/win-x86
+dotnet publish src/ClipboardPal.App -c Release -r linux-x64 -o publish/linux-x64
+dotnet publish src/ClipboardPal.App -c Release -r osx-x64 -o publish/osx-x64
+dotnet publish src/ClipboardPal.App -c Release -r osx-arm64 -o publish/osx-arm64
 ```
 
+### GitHub Releases (CI)
+
+Push a version tag — Actions builds all RIDs above and attaches zip assets to a Release:
+
+```bash
+git tag v2.0.0
+git push origin v2.0.0
+```
+
+Workflow: `.github/workflows/release.yml` (runs **only on tags**, not on every commit — suitable for a private repo with limited Actions minutes).
+
+OCR models / CLI still bootstrap at runtime into app data; they are not packed into the release zip.
 ## Architecture
 
 ```

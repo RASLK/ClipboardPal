@@ -50,4 +50,6 @@ dotnet restore
 dotnet run --project src/ClipboardPal.App -c Release
 ```
 
+Релиз на GitHub: тег `v2.0.0` → Actions соберёт single-file zip для `win-x64`, `win-x86`, `linux-x64`, `osx-x64`, `osx-arm64`. Workflow только на тегах (удобно для приватного репо).
+
 Подробнее (OCR, publish, архитектура) — в [английской версии README](../README.md).
