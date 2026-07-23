@@ -33,8 +33,10 @@ jobs:
             os: windows-latest
           - rid: linux-x64
             os: ubuntu-latest
+          # Both Mac RIDs on macos-latest (arm64): cross-publish osx-x64 — avoids
+          # long queues / scarce macos-13 Intel runners.
           - rid: osx-x64
-            os: macos-13
+            os: macos-latest
           - rid: osx-arm64
             os: macos-latest
 
