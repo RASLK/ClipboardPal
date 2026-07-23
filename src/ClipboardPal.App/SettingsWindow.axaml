@@ -1,0 +1,458 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ClipboardPal.Core.ViewModels"
+        xmlns:m="using:ClipboardPal.Core.Models"
+        x:Class="ClipboardPal.SettingsWindow"
+        x:DataType="vm:SettingsViewModel"
+        Title="{Binding Loc[settings.window]}"
+        Width="720" Height="680"
+        MinWidth="560" MinHeight="480"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource WindowBrush}">
+
+  <DockPanel Margin="16">
+    <TextBlock DockPanel.Dock="Top" Text="{Binding Loc[settings.title]}" FontSize="20" FontWeight="SemiBold"
+               Foreground="{DynamicResource TextBrush}" Margin="0,0,0,10" />
+
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0">
+      <StackPanel Spacing="10" MaxWidth="640">
+
+        <!-- Language -->
+        <TextBlock Classes="section-title" Text="{Binding Loc[sec.language]}" />
+        <Border Classes="section-card">
+          <StackPanel Spacing="6">
+            <TextBlock Classes="row-title" Text="{Binding Loc[row.language]}" />
+            <TextBlock Classes="row-hint" Text="{Binding Loc[hint.language]}" />
+            <ComboBox SelectedIndex="{Binding Settings.Language, Converter={StaticResource EnumInt}, ConverterParameter=UiLanguage}">
+              <ComboBoxItem Content="English" />
+              <ComboBoxItem Content="Русский" />
+              <ComboBoxItem Content="Deutsch" />
+              <ComboBoxItem Content="Français" />
+              <ComboBoxItem Content="中文" />
+              <ComboBoxItem Content="日本語" />
+            </ComboBox>
+          </StackPanel>
+        </Border>
+
+        <!-- Enable -->
+        <TextBlock Classes="section-title" Text="{Binding Loc[sec.enable]}" Margin="0,6,0,0" />
+        <Border Classes="section-card">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Margin="0,0,8,0">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.monitor]}" />
+              <TextBlock Classes="row-hint" Text="{Binding Loc[hint.monitor]}" />
+            </StackPanel>
+            <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.ClipboardMonitoringEnabled}" />
+          </Grid>
+        </Border>
+
+        <!-- General -->
+        <TextBlock Classes="section-title" Text="{Binding Loc[sec.general]}" Margin="0,6,0,0" />
+        <Border Classes="section-card">
+          <StackPanel Spacing="14">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.autostart]}" />
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.LaunchAtLogin}" />
+            </Grid>
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.topmost]}" />
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.KeepWindowOnTop}" />
+            </Grid>
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.tray]}" />
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.ShowTrayIcon}" />
+            </Grid>
+
+            <StackPanel Spacing="6">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.dock]}" />
+              <WrapPanel ItemWidth="140" ItemHeight="28">
+                <RadioButton GroupName="Dock" Margin="0,0,8,4"
+                             Content="{Binding Loc[dock.left], StringFormat='⬅ {0}'}"
+                             IsChecked="{Binding Settings.PanelDock, Converter={StaticResource EnumMatch}, ConverterParameter=Left}" />
+                <RadioButton GroupName="Dock" Margin="0,0,8,4"
+                             Content="{Binding Loc[dock.right], StringFormat='➡ {0}'}"
+                             IsChecked="{Binding Settings.PanelDock, Converter={StaticResource EnumMatch}, ConverterParameter=Right}" />
+                <RadioButton GroupName="Dock" Margin="0,0,8,4"
+                             Content="{Binding Loc[dock.top], StringFormat='⬆ {0}'}"
+                             IsChecked="{Binding Settings.PanelDock, Converter={StaticResource EnumMatch}, ConverterParameter=Top}" />
+                <RadioButton GroupName="Dock" Margin="0,0,8,4"
+                             Content="{Binding Loc[dock.bottom], StringFormat='⬇ {0}'}"
+                             IsChecked="{Binding Settings.PanelDock, Converter={StaticResource EnumMatch}, ConverterParameter=Bottom}" />
+              </WrapPanel>
+            </StackPanel>
+
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.confirm.quit]}" />
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.ConfirmBeforeQuit}" />
+            </Grid>
+
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.hide.outside]}" />
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.HidePopupOnOutsideClick}" />
+            </Grid>
+
+            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.updates]}" VerticalAlignment="Center" />
+              <Button Grid.Column="1" Content="{Binding Loc[btn.check]}" Command="{Binding CheckUpdatesCommand}"
+                      Padding="12,6" />
+              <TextBlock Grid.Row="1" Grid.ColumnSpan="2"
+                         Text="{Binding UpdateStatus}" Foreground="{DynamicResource TextMutedBrush}"
+                         FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
+            </Grid>
+
+            <StackPanel Spacing="4">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.hotkey]}" />
+              <TextBox Text="{Binding HotkeyDisplay}" IsReadOnly="True"
+                       MinWidth="180" MaxWidth="320" HorizontalAlignment="Stretch"
+                       GotFocus="HotkeyBox_GotFocus" LostFocus="HotkeyBox_LostFocus" />
+              <TextBlock Classes="row-hint" Text="{Binding Loc[hint.hotkey]}" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <!-- Copy & Paste -->
+        <TextBlock Classes="section-title" Text="{Binding Loc[sec.copypaste]}" Margin="0,6,0,0" />
+        <Border Classes="section-card">
+          <StackPanel Spacing="14">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.sound]}" />
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.PlaySoundOnCopy}" />
+            </Grid>
+            <StackPanel IsVisible="{Binding Settings.PlaySoundOnCopy}" Spacing="6">
+              <TextBlock Classes="row-hint" Text="{Binding Loc[row.sound.kind]}" />
+              <ComboBox SelectedIndex="{Binding Settings.CopySound, Converter={StaticResource EnumInt}, ConverterParameter=CopySoundKind}">
+                <ComboBoxItem Content="{Binding Loc[sound.default]}" />
+                <ComboBoxItem Content="{Binding Loc[sound.soft]}" />
+                <ComboBoxItem Content="{Binding Loc[sound.click]}" />
+                <ComboBoxItem Content="{Binding Loc[sound.pop]}" />
+              </ComboBox>
+            </StackPanel>
+
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.tray.anim]}" />
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.AnimateTrayOnCopy}" />
+            </Grid>
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.hide.after.copy]}" />
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.HidePopupAfterCopy}" />
+            </Grid>
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.hide.after.paste]}" />
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.HidePopupAfterPaste}" />
+            </Grid>
+
+            <StackPanel Spacing="6">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Classes="row-title" Text="{Binding Loc[row.doubleclick]}" />
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.DoubleClickEnabled}" />
+              </Grid>
+              <ComboBox IsEnabled="{Binding Settings.DoubleClickEnabled}"
+                        SelectedIndex="{Binding Settings.DoubleClickAction, Converter={StaticResource EnumInt}, ConverterParameter=ClipAction}">
+                <ComboBoxItem Content="{Binding Loc[action.copy]}" />
+                <ComboBoxItem Content="{Binding Loc[action.copy.plain]}" />
+                <ComboBoxItem Content="{Binding Loc[action.paste]}" />
+                <ComboBoxItem Content="{Binding Loc[action.paste.plain]}" />
+              </ComboBox>
+            </StackPanel>
+
+            <StackPanel Spacing="6">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Classes="row-title" Text="{Binding Loc[row.quickslots]}" />
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.QuickSlotsEnabled}" />
+              </Grid>
+              <ComboBox IsEnabled="{Binding Settings.QuickSlotsEnabled}"
+                        SelectedIndex="{Binding Settings.QuickSlotAction, Converter={StaticResource EnumInt}, ConverterParameter=ClipAction}">
+                <ComboBoxItem Content="{Binding Loc[action.copy]}" />
+                <ComboBoxItem Content="{Binding Loc[action.copy.plain]}" />
+                <ComboBoxItem Content="{Binding Loc[action.paste]}" />
+                <ComboBoxItem Content="{Binding Loc[action.paste.plain]}" />
+              </ComboBox>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <!-- Appearance -->
+        <TextBlock Classes="section-title" Text="{Binding Loc[sec.appearance]}" Margin="0,6,0,0" />
+        <Border Classes="section-card">
+          <StackPanel Spacing="14">
+            <StackPanel Spacing="6">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.theme]}" />
+              <WrapPanel>
+                <RadioButton Content="{Binding Loc[theme.dark]}" GroupName="Theme" Margin="0,0,12,4"
+                             IsChecked="{Binding Settings.Theme, Converter={StaticResource EnumMatch}, ConverterParameter=Dark}" />
+                <RadioButton Content="{Binding Loc[theme.light]}" GroupName="Theme" Margin="0,0,12,4"
+                             IsChecked="{Binding Settings.Theme, Converter={StaticResource EnumMatch}, ConverterParameter=Light}" />
+                <RadioButton Content="{Binding Loc[theme.system]}" GroupName="Theme" Margin="0,0,12,4"
+                             IsChecked="{Binding Settings.Theme, Converter={StaticResource EnumMatch}, ConverterParameter=System}" />
+              </WrapPanel>
+            </StackPanel>
+
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Margin="0,0,8,0">
+                <TextBlock Classes="row-title" Text="{Binding Loc[row.select.last]}" />
+                <TextBlock Classes="row-hint" Text="{Binding Loc[hint.select.last]}" />
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.SelectLastOnOpen}" />
+            </Grid>
+
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Margin="0,0,8,0">
+                <TextBlock Classes="row-title" Text="{Binding Loc[row.move.recent]}" />
+                <TextBlock Classes="row-hint" Text="{Binding Loc[hint.move.recent]}" />
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.MoveRecentToTop}" />
+            </Grid>
+
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Margin="0,0,8,0">
+                <TextBlock Classes="row-title" Text="{Binding Loc[row.card.menu]}" />
+                <TextBlock Classes="row-hint" Text="{Binding Loc[hint.card.menu]}" />
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.ShowClipMenuButtons}" />
+            </Grid>
+
+            <StackPanel Spacing="4">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.page.size]}" />
+              <Grid ColumnDefinitions="*,Auto">
+                <Slider Minimum="20" Maximum="1000" TickFrequency="10" IsSnapToTickEnabled="True"
+                        Value="{Binding Settings.MainWindowPageSize}" />
+                <TextBlock Grid.Column="1" Text="{Binding Settings.MainWindowPageSize}"
+                           VerticalAlignment="Center" MinWidth="40" Margin="10,0,0,0"
+                           Foreground="{DynamicResource TextMutedBrush}" />
+              </Grid>
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.popup.limit]}" />
+              <Grid ColumnDefinitions="*,Auto">
+                <Slider Minimum="20" Maximum="1000" TickFrequency="10" IsSnapToTickEnabled="True"
+                        Value="{Binding Settings.PopupItemLimit}" />
+                <TextBlock Grid.Column="1" Text="{Binding Settings.PopupItemLimit}"
+                           VerticalAlignment="Center" MinWidth="40" Margin="10,0,0,0"
+                           Foreground="{DynamicResource TextMutedBrush}" />
+              </Grid>
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.preview.len]}" />
+              <Grid ColumnDefinitions="*,Auto">
+                <Slider Minimum="20" Maximum="1000" TickFrequency="10" IsSnapToTickEnabled="True"
+                        Value="{Binding Settings.PreviewLength}" />
+                <TextBlock Grid.Column="1" Text="{Binding Settings.PreviewLength}"
+                           VerticalAlignment="Center" MinWidth="40" Margin="10,0,0,0"
+                           Foreground="{DynamicResource TextMutedBrush}" />
+              </Grid>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <!-- Hot edge -->
+        <TextBlock Classes="section-title" Text="{Binding Loc[sec.hotedge]}" Margin="0,6,0,0" />
+        <Border Classes="section-card">
+          <StackPanel Spacing="14">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Margin="0,0,8,0">
+                <TextBlock Classes="row-title" Text="{Binding Loc[row.hotedge]}" />
+                <TextBlock Classes="row-hint" Text="{Binding Loc[hint.hotedge]}" />
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.HotEdgeEnabled}" />
+            </Grid>
+            <StackPanel Spacing="4" IsEnabled="{Binding Settings.HotEdgeEnabled}">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.hotedge.delay]}" />
+              <Grid ColumnDefinitions="*,Auto">
+                <Slider Minimum="0.05" Maximum="2" TickFrequency="0.05" IsSnapToTickEnabled="True"
+                        Value="{Binding Settings.HotEdgeDelaySeconds}" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding Settings.HotEdgeDelaySeconds, StringFormat='{}{0:0.##}'}"
+                           VerticalAlignment="Center" MinWidth="40" Margin="10,0,0,0"
+                           Foreground="{DynamicResource TextMutedBrush}" />
+              </Grid>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <!-- Quick mode -->
+        <TextBlock Classes="section-title" Text="{Binding Loc[sec.quickmode]}" Margin="0,6,0,0" />
+        <Border Classes="section-card">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Margin="0,0,8,0">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.quickmode]}" />
+              <TextBlock Classes="row-hint" Text="{Binding Loc[hint.quickmode]}" />
+            </StackPanel>
+            <ToggleSwitch Grid.Column="1" VerticalAlignment="Top" IsChecked="{Binding Settings.QuickModeEnabled}" />
+          </Grid>
+        </Border>
+
+        <!-- Queue -->
+        <TextBlock Classes="section-title" Text="{Binding Loc[sec.queue]}" Margin="0,6,0,0" />
+        <Border Classes="section-card">
+          <StackPanel Spacing="14">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Margin="0,0,8,0">
+                <TextBlock Classes="row-title" Text="{Binding Loc[row.queue]}" />
+                <TextBlock Classes="row-hint" Text="{Binding Loc[hint.queue]}" />
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.QueueEnabled}" />
+            </Grid>
+            <StackPanel Spacing="6" IsEnabled="{Binding Settings.QueueEnabled}">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.queue.mode]}" />
+              <ComboBox SelectedIndex="{Binding Settings.QueuePasteMode, Converter={StaticResource EnumInt}, ConverterParameter=QueuePasteMode}">
+                <ComboBoxItem Content="Insert new" />
+                <ComboBoxItem Content="Append" />
+                <ComboBoxItem Content="Sequential" />
+                <ComboBoxItem Content="First" />
+              </ComboBox>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <!-- Plain text -->
+        <TextBlock Classes="section-title" Text="{Binding Loc[sec.plaintext]}" Margin="0,6,0,0" />
+        <Border Classes="section-card">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Margin="0,0,8,0">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.autoplain]}" />
+              <TextBlock Classes="row-hint" Text="{Binding Loc[hint.autoplain]}" />
+            </StackPanel>
+            <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.AutoPlainText}" />
+          </Grid>
+        </Border>
+
+        <!-- Data -->
+        <TextBlock Classes="section-title" Text="{Binding Loc[sec.data]}" Margin="0,6,0,0" />
+        <Border Classes="section-card">
+          <StackPanel Spacing="14">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Margin="0,0,8,0">
+                <TextBlock Classes="row-title" Text="{Binding Loc[row.skip.trash]}" />
+                <TextBlock Classes="row-hint" Text="{Binding Loc[hint.skip.trash]}" />
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.SkipTrash}" />
+            </Grid>
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.ocr]}" />
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.RecognizeTextOnImages}" />
+            </Grid>
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.duplicates]}" />
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.SaveDuplicates}" />
+            </Grid>
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.images]}" />
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.CaptureImages}" />
+            </Grid>
+            <StackPanel Spacing="4">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.history.limit]}" />
+              <Grid ColumnDefinitions="*,Auto">
+                <Slider Minimum="50" Maximum="100000" TickFrequency="50" IsSnapToTickEnabled="True"
+                        Value="{Binding Settings.MaxHistoryItems}" />
+                <TextBlock Grid.Column="1" Text="{Binding Settings.MaxHistoryItems}"
+                           VerticalAlignment="Center" MinWidth="56" Margin="10,0,0,0"
+                           Foreground="{DynamicResource TextMutedBrush}" />
+              </Grid>
+            </StackPanel>
+            <StackPanel Spacing="4">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.exclude]}" />
+              <TextBlock Classes="row-hint" Text="{Binding Loc[hint.exclude]}" />
+              <TextBox AcceptsReturn="True" TextWrapping="Wrap" Height="64"
+                       Text="{Binding Settings.ExcludedApps}" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <!-- Links -->
+        <TextBlock Classes="section-title" Text="{Binding Loc[sec.link]}" Margin="0,6,0,0" />
+        <Border Classes="section-card">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Margin="0,0,8,0">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.link.preview]}" />
+              <TextBlock Classes="row-hint" Text="{Binding Loc[hint.link.preview]}" />
+            </StackPanel>
+            <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.FetchLinkPreview}" />
+          </Grid>
+        </Border>
+
+        <!-- Search -->
+        <TextBlock Classes="section-title" Text="{Binding Loc[sec.search]}" Margin="0,6,0,0" />
+        <Border Classes="section-card">
+          <StackPanel Spacing="14">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Margin="0,0,8,0">
+                <TextBlock Classes="row-title" Text="{Binding Loc[row.case]}" />
+                <TextBlock Classes="row-hint" Text="{Binding Loc[hint.case]}" />
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.SearchCaseSensitive}" />
+            </Grid>
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.regex]}" />
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.SearchUseRegex}" />
+            </Grid>
+          </StackPanel>
+        </Border>
+
+        <!-- History -->
+        <TextBlock Classes="section-title" Text="{Binding Loc[sec.history]}" Margin="0,6,0,0" />
+        <Border Classes="section-card">
+          <StackPanel Spacing="14">
+            <StackPanel Spacing="6">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.retention]}" />
+              <TextBlock Classes="row-hint" Text="{Binding Loc[hint.retention]}" />
+              <ComboBox SelectedIndex="{Binding Settings.HistoryRetention, Converter={StaticResource EnumInt}, ConverterParameter=HistoryRetention}">
+                <ComboBoxItem Content="1 day" />
+                <ComboBoxItem Content="1 week" />
+                <ComboBoxItem Content="1 month" />
+                <ComboBoxItem Content="3 months" />
+                <ComboBoxItem Content="6 months" />
+                <ComboBoxItem Content="1 year" />
+                <ComboBoxItem Content="Forever" />
+              </ComboBox>
+            </StackPanel>
+
+            <StackPanel Spacing="6">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.clear.all]}" />
+              <TextBlock Classes="row-hint" Text="{Binding Loc[hint.clear.all]}" />
+              <Button Content="{Binding Loc[btn.clear.all]}" Classes="danger" HorizontalAlignment="Left"
+                      Command="{Binding ClearAllHistoryCommand}" Padding="14,8" />
+            </StackPanel>
+
+            <TextBlock Text="{Binding AppVersionFull}" FontSize="12"
+                       Foreground="{DynamicResource TextMutedBrush}" Margin="0,4,0,0" />
+
+            <Button Content="{Binding Loc[btn.reset]}"
+                    Command="{Binding ResetDefaultsCommand}" HorizontalAlignment="Left" Padding="12,8" />
+          </StackPanel>
+        </Border>
+
+        <!-- Permissions -->
+        <TextBlock Classes="section-title" Text="{Binding Loc[sec.permissions]}" Margin="0,6,0,0" />
+        <Border Classes="section-card">
+          <StackPanel Spacing="14">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Margin="0,0,8,0">
+                <TextBlock Classes="row-title" Text="{Binding Loc[row.accessibility]}" />
+                <TextBlock Classes="row-hint" Text="{Binding Loc[hint.accessibility]}" />
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.PermissionAccessibility}" />
+            </Grid>
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Margin="0,0,8,0">
+                <TextBlock Classes="row-title" Text="{Binding Loc[row.screen]}" />
+                <TextBlock Classes="row-hint" Text="{Binding Loc[hint.screen]}" />
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.PermissionScreenRecording}" />
+            </Grid>
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Margin="0,0,8,0">
+                <TextBlock Classes="row-title" Text="{Binding Loc[row.clipboard]}" />
+                <TextBlock Classes="row-hint" Text="{Binding Loc[hint.clipboard]}" />
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.PermissionClipboardRead}" />
+            </Grid>
+          </StackPanel>
+        </Border>
+
+        <Border Height="24" />
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</Window>

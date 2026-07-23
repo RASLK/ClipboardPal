@@ -1,0 +1,170 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:m="using:ClipboardPal.Core.Models"
+        xmlns:vm="using:ClipboardPal.Core.ViewModels"
+        x:Class="ClipboardPal.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="ClipboardPal"
+        Width="1280" Height="296"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="True"
+        CanResize="False"
+        WindowStartupLocation="Manual"
+        Deactivated="Window_Deactivated"
+        KeyDown="Window_KeyDown">
+
+  <Border x:Name="PanelBorder"
+          Background="{DynamicResource PanelBrush}"
+          BorderBrush="{DynamicResource PanelBorderBrush}"
+          BorderThickness="1,1,1,0"
+          CornerRadius="16,16,0,0"
+          Padding="18,14,18,10">
+    <Grid RowDefinitions="Auto,*">
+
+      <!-- Одна линия: бренд + поиск слева, действия справа -->
+      <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,12" MinHeight="44">
+        <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+          <TextBlock Text="ClipboardPal" FontSize="16" FontWeight="SemiBold"
+                     Foreground="{DynamicResource TextBrush}"
+                     VerticalAlignment="Center"
+                     x:Name="HintText" />
+
+          <Border Background="{DynamicResource FieldBrush}"
+                  BorderBrush="{DynamicResource FieldBorderBrush}"
+                  BorderThickness="1" CornerRadius="10" Padding="12,0,8,0"
+                  Width="440" Height="40"
+                  VerticalAlignment="Center"
+                  x:Name="SearchBorder">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+              <TextBlock Text="⌕" FontSize="15" VerticalAlignment="Center" Margin="0,0,10,0"
+                         Foreground="{DynamicResource TextMutedBrush}" />
+              <TextBox x:Name="SearchBox" Grid.Column="1"
+                       Watermark="{Binding Loc[search.watermark]}"
+                       BorderThickness="0" Background="Transparent"
+                       Foreground="{DynamicResource TextBrush}"
+                       CaretBrush="{DynamicResource TextBrush}"
+                       FontSize="13"
+                       VerticalContentAlignment="Center"
+                       Text="{Binding SearchText}"
+                       KeyDown="SearchBox_KeyDown" />
+              <ToggleButton Grid.Column="2" Content=".*" ToolTip.Tip="{Binding Loc[tip.regex]}"
+                            IsChecked="{Binding UseRegex}"
+                            VerticalAlignment="Center" Padding="10,6" Margin="4,0,0,0" />
+            </Grid>
+          </Border>
+        </StackPanel>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8"
+                    VerticalAlignment="Center" HorizontalAlignment="Right">
+          <TextBlock Text="{Binding Items.Count, StringFormat='{}{0}'}"
+                     Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
+                     VerticalAlignment="Center"
+                     ToolTip.Tip="{Binding Loc[tip.count]}" />
+          <TextBlock Text="{Binding QueueCount, StringFormat='Q:{0}'}"
+                     Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
+                     VerticalAlignment="Center"
+                     IsVisible="{Binding HasQueueItems}"
+                     ToolTip.Tip="{Binding Loc[tip.queue]}" />
+          <Button Content="{Binding Loc[btn.trash]}" Command="{Binding ToggleTrashViewCommand}"
+                  Padding="14,8" MinHeight="36" VerticalAlignment="Center"
+                  ToolTip.Tip="{Binding Loc[tip.trash]}" />
+          <Button Content="{Binding Loc[btn.clear]}" Command="{Binding ClearUnpinnedCommand}"
+                  Padding="14,8" MinHeight="36" VerticalAlignment="Center" />
+          <Button Content="⚙" Click="Settings_Click"
+                  Padding="12,8" MinHeight="36" MinWidth="40" VerticalAlignment="Center"
+                  ToolTip.Tip="{Binding Loc[tip.settings]}" />
+        </StackPanel>
+      </Grid>
+
+      <ScrollViewer x:Name="ClipsScroll" Grid.Row="1"
+                    HorizontalScrollBarVisibility="Auto"
+                    VerticalScrollBarVisibility="Disabled">
+        <ItemsControl x:Name="ClipsList" ItemsSource="{Binding FilteredItems}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" Spacing="10" Margin="2,4,2,2" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="m:ClipItem">
+              <Panel Width="168" Height="178">
+                <Border Width="168" Height="168" Margin="0,10,0,0"
+                        Background="{DynamicResource CardBrush}"
+                        BorderBrush="{Binding IsSelected, Converter={StaticResource SelectedBrush}}"
+                        BorderThickness="1.5" CornerRadius="10"
+                        ClipToBounds="True"
+                        Cursor="Hand"
+                        PointerReleased="Card_PointerReleased"
+                        Tag="{Binding}">
+                  <Grid Margin="8" RowDefinitions="Auto,*,Auto">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Text="{Binding DisplayTitle}" FontSize="11" FontWeight="SemiBold"
+                                 Foreground="{DynamicResource TextBrush}" TextTrimming="CharacterEllipsis"
+                                 IsVisible="{Binding !IsEditing}" />
+                      <TextBox Text="{Binding Title}" FontSize="11"
+                               MaxWidth="130" MinWidth="0"
+                               IsVisible="{Binding IsEditing}"
+                               KeyDown="TitleEditor_KeyDown"
+                               LostFocus="TitleEditor_LostFocus" />
+                      <TextBlock Grid.Column="1" Text="📌" FontSize="11" Margin="4,0,0,0"
+                                 IsVisible="{Binding IsPinned}" />
+                    </Grid>
+
+                    <Border Grid.Row="1" Margin="0,6,0,0" ClipToBounds="True">
+                      <Panel>
+                        <TextBlock Text="{Binding PreviewText}" FontSize="11"
+                                   Foreground="{DynamicResource TextBrush}"
+                                   TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                   MaxLines="5"
+                                   IsVisible="{Binding ImagePath, Converter={x:Static StringConverters.IsNullOrEmpty}}" />
+                        <Image Source="{Binding ImagePath, Converter={StaticResource ImageThumb}}"
+                               Stretch="Uniform"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               IsVisible="{Binding ImagePath, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                      </Panel>
+                    </Border>
+
+                    <Grid Grid.Row="2" Margin="0,4,0,0" ColumnDefinitions="*,Auto" MinHeight="22">
+                      <TextBlock Text="{Binding CreatedAt, Converter={StaticResource RelativeTime}}"
+                                 FontSize="10" Foreground="{DynamicResource TextMutedBrush}"
+                                 TextTrimming="CharacterEllipsis"
+                                 VerticalAlignment="Center" />
+                      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="1"
+                                  IsVisible="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).ShowClipMenuButtons}">
+                        <Button Content="📌" Padding="3,2" FontSize="10" Tag="{Binding}"
+                                Click="Pin_Click" ToolTip.Tip="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Loc[tip.pin]}" />
+                        <Button Content="＋" Padding="3,2" FontSize="10" Tag="{Binding}"
+                                Click="Queue_Click" ToolTip.Tip="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Loc[tip.queue.add]}" />
+                        <Button Content="✏" Padding="3,2" FontSize="10" Tag="{Binding}"
+                                Click="Rename_Click" ToolTip.Tip="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Loc[tip.rename]}" />
+                        <Button Content="🗑" Padding="3,2" FontSize="10" Tag="{Binding}"
+                                Click="Delete_Click" ToolTip.Tip="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Loc[tip.delete]}" />
+                      </StackPanel>
+                    </Grid>
+                  </Grid>
+                </Border>
+
+                <Border Width="24" Height="24" CornerRadius="12"
+                        Background="{DynamicResource AccentBrush}"
+                        HorizontalAlignment="Left" VerticalAlignment="Top"
+                        IsVisible="{Binding SlotNumber, Converter={StaticResource SlotVisible}}">
+                  <TextBlock Text="{Binding SlotBadge}" FontWeight="Bold" FontSize="12"
+                             Foreground="{DynamicResource AccentTextBrush}"
+                             HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+              </Panel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+
+      <TextBlock Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                 Text="{Binding EmptyMessage}"
+                 Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
+                 IsVisible="{Binding IsEmpty}" />
+    </Grid>
+  </Border>
+</Window>

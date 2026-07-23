@@ -1,0 +1,89 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:ClipboardPal"
+             x:Class="ClipboardPal.App"
+             RequestedThemeVariant="Dark">
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://ClipboardPal/Themes/Dark.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+      <local:ImagePathToBitmapConverter x:Key="ImageThumb" />
+      <local:RelativeTimeConverter x:Key="RelativeTime" />
+      <local:BoolToOpacityConverter x:Key="BoolToOpacity" />
+      <local:SlotVisibleConverter x:Key="SlotVisible" />
+      <local:SelectedToBrushConverter x:Key="SelectedBrush" />
+      <local:EnumMatchConverter x:Key="EnumMatch" />
+      <local:EnumIntConverter x:Key="EnumInt" />
+    </ResourceDictionary>
+  </Application.Resources>
+  <Application.Styles>
+    <FluentTheme />
+    <Style Selector="TextBlock.section-title">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+      <Setter Property="Margin" Value="2,0,0,2" />
+    </Style>
+    <Style Selector="TextBlock.row-title">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0,0,12,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.row-hint">
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0,2,12,0" />
+    </Style>
+    <Style Selector="Border.section-card">
+      <Setter Property="Background" Value="{DynamicResource SectionBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="16,14" />
+    </Style>
+    <Style Selector="Border.section-card ToggleSwitch">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="MinWidth" Value="0" />
+    </Style>
+    <Style Selector="Border.section-card ComboBox">
+      <Setter Property="MinWidth" Value="180" />
+      <Setter Property="MaxWidth" Value="360" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Border.section-card Slider">
+      <Setter Property="MinWidth" Value="120" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Button.danger">
+      <Setter Property="Background" Value="#FFD13438" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="TabControl > TabItem">
+      <Setter Property="FontSize" Value="12.5" />
+      <Setter Property="Padding" Value="10,8" />
+    </Style>
+  </Application.Styles>
+  <TrayIcon.Icons>
+    <TrayIcons>
+      <TrayIcon Icon="/Assets/tray.png"
+                ToolTipText="ClipboardPal"
+                IsVisible="True"
+                Clicked="Tray_Clicked">
+        <TrayIcon.Menu>
+          <NativeMenu>
+            <NativeMenuItem Header="Open panel" Click="TrayOpen_Click" />
+            <NativeMenuItem Header="Settings" Click="TraySettings_Click" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="Clear history" Click="TrayClear_Click" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="Quit" Click="TrayExit_Click" />
+          </NativeMenu>
+        </TrayIcon.Menu>
+      </TrayIcon>
+    </TrayIcons>
+  </TrayIcon.Icons>
+</Application>
