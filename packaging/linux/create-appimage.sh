@@ -35,8 +35,8 @@ Terminal=false
 StartupNotify=true
 EOF
 
-# AppImage runtime looks for .desktop + icon at AppDir root too.
-cp "${APPDIR}/ClipboardPal.desktop" "${APPDIR}/"
+mkdir -p "${APPDIR}/usr/share/applications"
+cp "${APPDIR}/ClipboardPal.desktop" "${APPDIR}/usr/share/applications/ClipboardPal.desktop"
 
 cat > "${APPDIR}/AppRun" << 'EOF'
 #!/bin/bash
