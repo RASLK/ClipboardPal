@@ -1,0 +1,82 @@
+# Packaging(macOS) — Flameshot-style: DMG with .app + sha256sum
+# Called from release.yml on tags; also runnable manually.
+
+name: Packaging (macOS)
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Version without leading v (e.g. 2.0.1)
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version without leading v (e.g. 2.0.1)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  PROJECT: src/ClipboardPal.App/ClipboardPal.App.csproj
+
+jobs:
+  macos-pack:
+    name: ${{ matrix.asset_stem }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: osx-arm64
+            asset_stem: macos-arm64
+          - rid: osx-x64
+            asset_stem: macos-intel
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          V="${{ inputs.version }}"
+          echo "version=${V#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish
+        run: |
+          out="publish/${{ matrix.rid }}"
+          mkdir -p "$out" dist
+          dotnet publish "$PROJECT" -c Release -r "${{ matrix.rid }}" -o "$out" \
+            -p:Version="${{ steps.ver.outputs.version }}" \
+            -p:UseAppHost=true -p:DebugType=None -p:DebugSymbols=false \
+            --verbosity minimal
+          chmod +x "$out/ClipboardPal"
+
+      - name: Build DMG
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          STEM="${{ matrix.asset_stem }}"
+          BIN="publish/${{ matrix.rid }}/ClipboardPal"
+          DMG="dist/ClipboardPal-${VERSION}-${STEM}.dmg"
+          chmod +x packaging/macos/create-app-dmg.sh
+          packaging/macos/create-app-dmg.sh "$BIN" "$VERSION" "$DMG" \
+            src/ClipboardPal.App/Assets/tray.png
+          (cd dist && sha256sum "$(basename "$DMG")" > "$(basename "$DMG").sha256sum")
+          ls -lh dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClipboardPal-macos-${{ matrix.asset_stem }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14

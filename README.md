@@ -91,16 +91,29 @@ dotnet publish src/ClipboardPal.App -c Release -r osx-arm64 -o publish/osx-arm64
 
 ### GitHub Releases (CI)
 
-Push a version tag — Actions builds all RIDs above and attaches zip assets to a Release:
+Push a version tag. Layout mirrors [Flameshot’s workflows](https://github.com/flameshot-org/flameshot/tree/master/.github/workflows):
+
+| Workflow | Assets |
+| --- | --- |
+| `windows-pack.yml` | `.msi` + `.zip` + `.sha256sum` |
+| `macos-pack.yml` | `.dmg` + `.sha256sum` |
+| `linux-pack.yml` | `.AppImage` + `.zip` + `.sha256sum` |
+| `release.yml` | on tag → run packs → create GitHub Release |
+
+**`.sha256sum`** — small text file with the SHA-256 hash of the matching asset. Lets users check the download is intact (`sha256sum -c file.sha256sum`). Not an installer.
+
+**Source code (zip/tar.gz)** — auto-added by GitHub (repo snapshot), not our build.
 
 ```bash
-git tag v2.0.0
-git push origin v2.0.0
+git tag v2.0.1
+git push origin v2.0.1
 ```
 
-Workflow: `.github/workflows/release.yml` (runs **only on tags**, not on every commit — suitable for a private repo with limited Actions minutes).
+Pack jobs can also be run manually via **Actions → Packaging (Windows|macOS|Linux) → Run workflow**.
 
-OCR models / CLI still bootstrap at runtime into app data; they are not packed into the release zip.
+**macOS:** DMGs are unsigned (no Apple Developer ID). First launch may need right-click → Open.  
+**OCR** bootstraps at runtime into app data — not packed into installers.  
+**Linux:** AppImage is the modern portable format (like Flameshot). deb/rpm/Flatpak/Snap are Qt/distro-specific and not mirrored for Avalonia yet.
 ## Architecture
 
 ```

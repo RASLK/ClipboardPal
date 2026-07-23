@@ -1,0 +1,112 @@
+# Packaging(Windows) — Flameshot-style: MSI installer + ZIP portable + sha256sum
+# Called from release.yml on tags; also runnable manually.
+
+name: Packaging (Windows)
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Version without leading v (e.g. 2.0.1)
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version without leading v (e.g. 2.0.1)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  PROJECT: src/ClipboardPal.App/ClipboardPal.App.csproj
+
+jobs:
+  windows-pack:
+    name: ${{ matrix.asset_stem }} (${{ matrix.rid }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            asset_stem: win64
+            wix_arch: x64
+          - rid: win-x86
+            asset_stem: win32
+            wix_arch: x86
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          V="${{ inputs.version }}"
+          V="${V#v}"
+          echo "version=${V}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish
+        shell: bash
+        run: |
+          out="publish/${{ matrix.rid }}"
+          mkdir -p "$out" dist
+          dotnet publish "$PROJECT" -c Release -r "${{ matrix.rid }}" -o "$out" \
+            -p:Version="${{ steps.ver.outputs.version }}" \
+            -p:UseAppHost=true -p:DebugType=None -p:DebugSymbols=false \
+            --verbosity minimal
+
+      - name: Pack ZIP portable
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          STEM="${{ matrix.asset_stem }}"
+          EXE="publish/${{ matrix.rid }}/ClipboardPal.exe"
+          ZIP="dist/ClipboardPal-${VERSION}-${STEM}.zip"
+          if command -v zip >/dev/null 2>&1; then
+            (cd "publish/${{ matrix.rid }}" && zip -9 "../../${ZIP}" ClipboardPal.exe)
+          else
+            pwsh -NoProfile -Command "Compress-Archive -Path '$EXE' -DestinationPath '$ZIP' -Force"
+          fi
+          (cd dist && sha256sum "$(basename "$ZIP")" > "$(basename "$ZIP").sha256sum" 2>/dev/null) || \
+            pwsh -NoProfile -Command "\$n='$(basename "$ZIP")'; \$h=(Get-FileHash \"dist/\$n\" -Algorithm SHA256).Hash.ToLowerInvariant(); Set-Content \"dist/\$n.sha256sum\" \"\$h  \$n\""
+
+      - name: Build MSI (WiX)
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          STEM="${{ matrix.asset_stem }}"
+          EXE="publish/${{ matrix.rid }}/ClipboardPal.exe"
+          MSI="dist/ClipboardPal-${VERSION}-${STEM}.msi"
+          WIX_VER="$VERSION"
+          [[ "$WIX_VER" == *.*.*.* ]] || WIX_VER="${WIX_VER}.0"
+
+          dotnet tool install --global wix --version 6.0.1
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          wix build packaging/windows/ClipboardPal.wxs \
+            -arch "${{ matrix.wix_arch }}" \
+            -d "ProductVersion=${WIX_VER}" \
+            -d "ExeSource=${EXE}" \
+            -o "$MSI"
+          rm -f "${MSI%.msi}.wixpdb" dist/*.wixpdb 2>/dev/null || true
+
+          (cd dist && sha256sum "$(basename "$MSI")" > "$(basename "$MSI").sha256sum" 2>/dev/null) || \
+            pwsh -NoProfile -Command "\$n='$(basename "$MSI")'; \$h=(Get-FileHash \"dist/\$n\" -Algorithm SHA256).Hash.ToLowerInvariant(); Set-Content \"dist/\$n.sha256sum\" \"\$h  \$n\""
+          ls -lh dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClipboardPal-windows-${{ matrix.asset_stem }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14

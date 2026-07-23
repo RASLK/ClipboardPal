@@ -1,8 +1,14 @@
-# Builds self-contained single-file binaries and attaches them to a GitHub Release.
-# Trigger: push a version tag, e.g. git tag v2.0.0 && git push origin v2.0.0
+# Orchestrates Flameshot-style packaging workflows and publishes a GitHub Release.
+# Trigger: git tag vX.Y.Z && git push origin vX.Y.Z
 #
-# Private repos: Actions uses your plan minutes (macOS costs more). This workflow
-# runs only on tags — fine when you release rarely.
+# Layout (same idea as flameshot-org/flameshot/.github/workflows):
+#   windows-pack.yml → MSI + ZIP + .sha256sum
+#   macos-pack.yml   → DMG + .sha256sum
+#   linux-pack.yml   → AppImage + ZIP + .sha256sum
+#   release.yml      → this file (tag → pack → Release assets)
+#
+# .sha256sum files: plaintext checksums so users can verify downloads were not corrupted
+#   or tampered with (sha256sum -c file.sha256sum).
 
 name: Release
 
@@ -10,114 +16,63 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version without leading v (used only for manual dispatch without a tag)
+        required: false
+        type: string
 
 permissions:
   contents: write
 
-env:
-  DOTNET_NOLOGO: true
-  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
-  PROJECT: src/ClipboardPal.App/ClipboardPal.App.csproj
-
 jobs:
-  build:
-    name: ${{ matrix.rid }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - rid: win-x64
-            os: windows-latest
-          - rid: win-x86
-            os: windows-latest
-          - rid: linux-x64
-            os: ubuntu-latest
-          # Both Mac RIDs on macos-latest (arm64): cross-publish osx-x64 — avoids
-          # long queues / scarce macos-13 Intel runners.
-          - rid: osx-x64
-            os: macos-latest
-          - rid: osx-arm64
-            os: macos-latest
-
+  version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      tag: ${{ steps.ver.outputs.tag }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Resolve version from tag
-        id: ver
-        shell: bash
+      - id: ver
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          VERSION="${TAG#v}"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-
-      - name: Publish
-        shell: bash
-        run: |
-          out="publish/${{ matrix.rid }}"
-          mkdir -p "$out"
-          dotnet publish "$PROJECT" \
-            -c Release \
-            -r "${{ matrix.rid }}" \
-            -o "$out" \
-            -p:Version="${{ steps.ver.outputs.version }}" \
-            -p:DebugType=None \
-            -p:DebugSymbols=false \
-            --verbosity minimal
-
-      - name: Pack zip
-        shell: bash
-        run: |
-          set -euo pipefail
-          VERSION="${{ steps.ver.outputs.version }}"
-          RID="${{ matrix.rid }}"
-          out="publish/${RID}"
-          asset="ClipboardPal-${VERSION}-${RID}.zip"
-
-          if [[ "$RID" == win-* ]]; then
-            bin="$out/ClipboardPal.exe"
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          elif [[ -n "${{ inputs.version }}" ]]; then
+            TAG="v${{ inputs.version }}"
+            TAG="${TAG#vv}"
           else
-            bin="$out/ClipboardPal"
-            chmod +x "$bin"
-          fi
-
-          if [[ ! -f "$bin" ]]; then
-            echo "Expected binary not found: $bin"
-            ls -la "$out"
+            echo "Need a tag push or workflow_dispatch version input" >&2
             exit 1
           fi
+          VERSION="${TAG#v}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-          # Prefer a zip that contains only the single-file binary.
-          mkdir -p dist
-          if command -v zip >/dev/null 2>&1; then
-            (cd "$out" && zip -9 "../../dist/${asset}" "$(basename "$bin")")
-          else
-            # Windows runners: Compress-Archive via PowerShell
-            pwsh -NoProfile -Command \
-              "Compress-Archive -Path '$bin' -DestinationPath 'dist/${asset}' -Force"
-          fi
+  windows:
+    needs: version
+    uses: ./.github/workflows/windows-pack.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
 
-          ls -lh "dist/${asset}"
+  macos:
+    needs: version
+    uses: ./.github/workflows/macos-pack.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ClipboardPal-${{ matrix.rid }}
-          path: dist/*.zip
-          if-no-files-found: error
-          retention-days: 14
+  linux:
+    needs: version
+    uses: ./.github/workflows/linux-pack.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
 
   release:
     name: Create GitHub Release
-    needs: build
+    needs: [version, windows, macos, linux]
     runs-on: ubuntu-latest
+    # Only publish a Release when a real tag was pushed (not bare manual pack).
+    if: github.ref_type == 'tag'
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -131,11 +86,27 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: ClipboardPal ${{ github.ref_name }}
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: ClipboardPal ${{ needs.version.outputs.tag }}
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(needs.version.outputs.tag, '-') }}
           generate_release_notes: true
-          files: artifacts/*.zip
+          append_body: true
+          body: |
+            ## Downloads
+
+            | Platform | Installer | Portable |
+            | --- | --- | --- |
+            | Windows x64 | `ClipboardPal-*-win64.msi` | `*-win64.zip` |
+            | Windows x86 | `ClipboardPal-*-win32.msi` | `*-win32.zip` |
+            | macOS Apple Silicon | `ClipboardPal-*-macos-arm64.dmg` | — |
+            | macOS Intel | `ClipboardPal-*-macos-intel.dmg` | — |
+            | Linux x64 | `ClipboardPal-*-linux-x64.AppImage` | `*-linux-x64.zip` |
+
+            Each package has a matching **`.sha256sum`** — verify with:
+            `sha256sum -c ClipboardPal-….sha256sum`
+
+            **macOS:** builds are unsigned. If Gatekeeper blocks: right-click → **Open**.
+          files: artifacts/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,79 @@
+# Packaging(Linux) — Flameshot-style: AppImage + ZIP portable + sha256sum
+# (deb/rpm/flatpak/snap need distro packaging tooling — not mirrored 1:1 for .NET)
+
+name: Packaging (Linux)
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Version without leading v (e.g. 2.0.1)
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version without leading v (e.g. 2.0.1)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  PROJECT: src/ClipboardPal.App/ClipboardPal.App.csproj
+
+jobs:
+  linux-pack:
+    name: linux-x64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Resolve version
+        id: ver
+        run: |
+          V="${{ inputs.version }}"
+          echo "version=${V#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish
+        run: |
+          mkdir -p publish/linux-x64 dist
+          dotnet publish "$PROJECT" -c Release -r linux-x64 -o publish/linux-x64 \
+            -p:Version="${{ steps.ver.outputs.version }}" \
+            -p:UseAppHost=true -p:DebugType=None -p:DebugSymbols=false \
+            --verbosity minimal
+          chmod +x publish/linux-x64/ClipboardPal
+
+      - name: Pack ZIP portable
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          ZIP="dist/ClipboardPal-${VERSION}-linux-x64.zip"
+          (cd publish/linux-x64 && zip -9 "../../${ZIP}" ClipboardPal)
+          (cd dist && sha256sum "$(basename "$ZIP")" > "$(basename "$ZIP").sha256sum")
+
+      - name: Build AppImage
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          OUT="dist/ClipboardPal-${VERSION}-linux-x64.AppImage"
+          chmod +x packaging/linux/create-appimage.sh
+          packaging/linux/create-appimage.sh \
+            publish/linux-x64/ClipboardPal \
+            "$VERSION" \
+            "$OUT" \
+            src/ClipboardPal.App/Assets/tray.png
+          (cd dist && sha256sum "$(basename "$OUT")" > "$(basename "$OUT").sha256sum")
+          ls -lh dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClipboardPal-linux-x64
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
