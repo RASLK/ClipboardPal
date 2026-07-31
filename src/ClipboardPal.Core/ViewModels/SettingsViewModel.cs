@@ -14,6 +14,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly IAutostartService _autostart;
     private readonly IGlobalHotkeyService _hotkeys;
     private readonly ILocalizationService _l10n;
+    private readonly IOcrService _ocr;
 
     public AppSettings Settings => _settingsService.Settings;
     public LocView Loc { get; }
@@ -32,18 +33,23 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool _isCapturingHotkey;
 
+    [ObservableProperty]
+    private string _ocrStatus = string.Empty;
+
     public SettingsViewModel(
         SettingsService settingsService,
         MainViewModel main,
         IAutostartService autostart,
         IGlobalHotkeyService hotkeys,
-        ILocalizationService l10n)
+        ILocalizationService l10n,
+        IOcrService ocr)
     {
         _settingsService = settingsService;
         _main = main;
         _autostart = autostart;
         _hotkeys = hotkeys;
         _l10n = l10n;
+        _ocr = ocr;
         Loc = new LocView(l10n);
         HotkeyDisplay = Settings.Hotkey.ToString();
 
@@ -90,6 +96,26 @@ public sealed partial class SettingsViewModel : ObservableObject
         UpdateStatus = "…";
         await Task.Delay(600);
         UpdateStatus = "OK";
+    }
+
+    /// <summary>
+    /// Answers "is OCR alive at all" without making the user copy a picture and guess. The first
+    /// call unpacks the bundled model, so it can take a moment; it never goes to the network.
+    /// </summary>
+    [RelayCommand]
+    private async Task CheckOcrAsync()
+    {
+        OcrStatus = _l10n["ocr.checking"];
+        try
+        {
+            var info = await _ocr.DescribeAsync().ConfigureAwait(true);
+            var headline = info.IsReady ? _l10n["ocr.ready"] : _l10n["ocr.notready"];
+            OcrStatus = $"{headline}{Environment.NewLine}{info.Summary}";
+        }
+        catch (Exception ex)
+        {
+            OcrStatus = $"{_l10n["ocr.notready"]}{Environment.NewLine}{ex.Message}";
+        }
     }
 
     [RelayCommand]

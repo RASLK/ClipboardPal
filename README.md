@@ -24,7 +24,7 @@ PastePal-like UX: card panel, search (Regex and layout-independent en↔ru), qui
 | Runtime | .NET 10 (LTS) |
 | MVVM | CommunityToolkit.Mvvm (source generators) |
 | Hotkeys | SharpHook (libuiohook) — Win / macOS / Linux |
-| OCR | Tesseract 5 (eng+rus) + WinRT on Windows |
+| OCR | System engines (Apple Vision / Windows OCR) + bundled PP-OCRv5 on ONNX Runtime |
 | DI | Microsoft.Extensions.DependencyInjection |
 
 Data lives under `%LocalAppData%/ClipboardPal` (`history.json`, `settings.json`, `images/`, `ocr/`, `sounds/`, `backups/`) and stays compatible across app versions.
@@ -38,34 +38,38 @@ Data lives under `%LocalAppData%/ClipboardPal` (`history.json`, `settings.json`,
 
 - Global hotkey (default Win/Cmd+Shift+V)
 - Card panel: bottom / top / left / right, dark / light / system theme
+- Three clip spaces switched by tabs in the panel header: **History**, **Queue**, **Trash**
+- Queue — a separate temporary space: stage clips with **+** on a card, switch to the Queue tab and paste them one by one. A pasted clip leaves the queue but stays in history (configurable), and the queue survives restarts.
 - Search + Regex + layout-independent search
 - Quick select: hotkey modifiers + 1…0
 - Pin, rename, up to 100 000 items, excluded apps
 - Tray icon, launch at login, persistent history
-- Image OCR (eng+rus), hot edge, copy sound — all platforms
+- Offline image OCR (Latin + Cyrillic) with in-image region picking, hot edge, copy sound — all platforms
 - Text and image capture on Win / macOS / Linux
 - UI languages: English (default), Russian, German, French, Chinese, Japanese
 
 ## OCR
 
-On first recognition the app downloads `eng`/`rus` models into `%LocalAppData%/ClipboardPal/ocr/tessdata`.
+Works offline out of the box — nothing to install, nothing to download. Where the OS provides a
+recognizer it is used first; otherwise the bundled PP-OCRv5 model runs on ONNX Runtime.
 
 | OS | Engine |
 | --- | --- |
-| Windows | WinRT OCR → Tesseract (in-process) → CLI |
-| macOS / Linux | system `tesseract` → conda-forge binaries → in-process when native libs exist |
+| macOS 10.15+ | Apple Vision (system) → bundled PP-OCRv5 |
+| Windows 10+ | Windows.Media.Ocr (system) → bundled PP-OCRv5 |
+| Linux | bundled PP-OCRv5 |
 
-Optional manual install:
+The bundled model reads Latin and Cyrillic alphabets and is embedded in the executable, so a
+single-file build stays self-contained. It is unpacked once into
+`%LocalAppData%/ClipboardPal/ocr/models` on first use.
 
-```bash
-# macOS
-brew install tesseract
+Every image card has an **OCR** button: it opens the picture in a region picker — draw a frame,
+drag its handles to adjust, zoom with the wheel (the view follows the selection). The recognized
+text is put on the clipboard and lands in history as a separate text card. Press OCR again to
+pick a new region.
 
-# Debian/Ubuntu
-sudo apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-rus
-```
-
-Enable **Recognize text in images** in Settings and grant Screen Recording if needed.
+For automatic recognition of every copied picture, enable **Recognize text in images** in
+Settings; **Check** reports which engine is active.
 
 ## Build
 
@@ -105,14 +109,14 @@ Push a version tag. Layout mirrors [Flameshot’s workflows](https://github.com/
 **Source code (zip/tar.gz)** — auto-added by GitHub (repo snapshot), not our build.
 
 ```bash
-git tag v2.0.1
-git push origin v2.0.1
+git tag v2.0.2
+git push origin v2.0.2
 ```
 
 Pack jobs can also be run manually via **Actions → Packaging (Windows|macOS|Linux) → Run workflow**.
 
 **macOS:** DMGs are unsigned (no Apple Developer ID). First launch may need right-click → Open.  
-**OCR** bootstraps at runtime into app data — not packed into installers.  
+**OCR** models are embedded in the executable and unpacked into app data on first use — nothing is downloaded at runtime.  
 **Linux:** AppImage is the modern portable format (like Flameshot). deb/rpm/Flatpak/Snap are Qt/distro-specific and not mirrored for Avalonia yet.
 ## Architecture
 

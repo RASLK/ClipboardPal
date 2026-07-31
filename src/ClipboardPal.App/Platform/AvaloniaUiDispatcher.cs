@@ -9,4 +9,6 @@ public sealed class AvaloniaUiDispatcher(Avalonia.Threading.Dispatcher dispatche
 
     public Task InvokeAsync(Action action) =>
         dispatcher.InvokeAsync(action).GetTask();
+
+    public bool CheckAccess() => dispatcher.CheckAccess();
 }

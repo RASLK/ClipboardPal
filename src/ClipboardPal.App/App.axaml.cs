@@ -231,7 +231,9 @@ public partial class App : Application
         Dispatcher.UIThread.Post(OpenSettingsWindow);
 
     private void TrayClear_Click(object? sender, EventArgs e) =>
-        Dispatcher.UIThread.Post(() => _viewModel?.ClearUnpinnedCommand.Execute(null));
+        // Not ClearUnpinnedCommand: that clears whatever space the panel last showed, and the
+        // tray item promises "Clear history" regardless of which tab was left open.
+        Dispatcher.UIThread.Post(() => _viewModel?.ClearHistoryUnpinned());
 
     private async void TrayExit_Click(object? sender, EventArgs e)
     {

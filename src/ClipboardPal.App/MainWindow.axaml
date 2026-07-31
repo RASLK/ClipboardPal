@@ -122,6 +122,7 @@
                         BorderThickness="1.5" CornerRadius="10"
                         ClipToBounds="True"
                         Cursor="Hand"
+                        PointerPressed="Card_PointerPressed"
                         PointerReleased="Card_PointerReleased"
                         Tag="{Binding}">
                   <Grid Margin="8" RowDefinitions="Auto,*,Auto">
@@ -169,9 +170,12 @@
                       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="1"
                                   Classes="card-actions"
                                   IsVisible="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).ShowClipMenuButtons}">
+                        <!-- Pinning and queueing are history concepts — dead buttons on trashed cards -->
                         <Button Content="📌" Padding="3,2" FontSize="10" Tag="{Binding}"
+                                IsVisible="{Binding !IsInTrash}"
                                 Click="Pin_Click" ToolTip.Tip="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Loc[tip.pin]}" />
                         <Button Content="＋" Padding="3,2" FontSize="10" Tag="{Binding}"
+                                IsVisible="{Binding !IsInTrash}"
                                 Classes="queue-toggle" Classes.queued="{Binding IsQueued}"
                                 Click="Queue_Click" ToolTip.Tip="{Binding QueueTooltip}" />
                         <Button Content="✏" Padding="3,2" FontSize="10" Tag="{Binding}"

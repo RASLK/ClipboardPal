@@ -188,10 +188,7 @@ public partial class MainWindow : Window
         _ = ApplyClipActionAsync(item, _settings.QuickSlotAction);
 
     private async void OnPasteRequested(ClipItem item) =>
-        await ApplyClipActionAsync(item, ResolveClickAction());
-
-    private ClipAction ResolveClickAction() =>
-        _settings.DoubleClickEnabled ? _settings.DoubleClickAction : ClipAction.Paste;
+        await ApplyClipActionAsync(item, ClipAction.Paste);
 
     private void OnQuickSlot(int slot)
     {
@@ -205,6 +202,14 @@ public partial class MainWindow : Window
 
     private async Task<bool> ApplyClipActionAsync(ClipItem item, ClipAction action)
     {
+        // Quick slots and quick mode can reach a trashed clip when the panel was left on the
+        // trash tab — activation there restores instead of pasting deleted content.
+        if (item.IsInTrash)
+        {
+            _viewModel.RestoreCommand.Execute(item);
+            return true;
+        }
+
         switch (action)
         {
             case ClipAction.Copy:
@@ -351,6 +356,12 @@ public partial class MainWindow : Window
         }
     }
 
+    private int _pressClickCount;
+    private ClipItem? _lastActivated;
+
+    private void Card_PointerPressed(object? sender, PointerPressedEventArgs e) =>
+        _pressClickCount = e.ClickCount;
+
     private void Card_PointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         if (e.InitialPressMouseButton != MouseButton.Left)
@@ -360,16 +371,30 @@ public partial class MainWindow : Window
         {
             var item = control.Tag as ClipItem ?? control.DataContext as ClipItem;
             if (item is null || item.IsEditing) return;
+            e.Handled = true;
 
             if (_viewModel.Space == PanelSpace.Trash)
             {
                 _viewModel.RestoreCommand.Execute(item);
-                e.Handled = true;
                 return;
             }
 
+            // Second release of a double click: the first one already pasted. Run the
+            // configured extra action once — and only when the cursor is still over the same
+            // clip, because consuming from the queue shifts the neighbouring card under it.
+            if (_pressClickCount >= 2)
+            {
+                if (_settings.DoubleClickEnabled &&
+                    _settings.DoubleClickAction != ClipAction.Paste &&
+                    ReferenceEquals(item, _lastActivated))
+                {
+                    _ = ApplyClipActionAsync(item, _settings.DoubleClickAction);
+                }
+                return;
+            }
+
+            _lastActivated = item;
             _viewModel.RequestPaste(item);
-            e.Handled = true;
         }
     }
 

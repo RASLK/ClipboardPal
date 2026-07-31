@@ -54,18 +54,30 @@ public enum CopySoundKind
     Pop
 }
 
-public enum QueuePasteMode
+/// <summary>Which clip space the panel is showing.</summary>
+public enum PanelSpace
 {
-    InsertNew,
-    Append,
-    Sequential,
-    First
+    History,
+    Queue,
+    Trash
 }
 
 public enum ClipItemType
 {
     Text,
     Image
+}
+
+/// <summary>What happened to an image clip's text recognition, as shown on the card.</summary>
+public enum OcrStatus
+{
+    /// <summary>Not attempted — OCR is off, or the clip is not an image.</summary>
+    None,
+    Running,
+    Done,
+    /// <summary>The engine worked, the image just has no readable text.</summary>
+    NoText,
+    Failed
 }
 
 public enum QuickSlotAction

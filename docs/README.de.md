@@ -24,7 +24,7 @@ PastePal-ähnliche Oberfläche: Kartenpanel, Suche (Regex und layoutunabhängig 
 | Runtime | .NET 10 (LTS) |
 | MVVM | CommunityToolkit.Mvvm |
 | Hotkeys | SharpHook (libuiohook) |
-| OCR | Tesseract 5 (eng+rus) + WinRT unter Windows |
+| OCR | Systemmodule (Apple Vision / Windows OCR) + integriertes PP-OCRv5 auf ONNX Runtime |
 | DI | Microsoft.Extensions.DependencyInjection |
 
 Daten unter `%LocalAppData%/ClipboardPal`.
@@ -35,10 +35,18 @@ Oberflächensprachen: Englisch (Standard), Russisch, Deutsch, Französisch, Chin
 
 - Globaler Hotkey (Standard Win/Cmd+Shift+V)
 - Panel unten/oben/links/rechts, Themes
+- Drei Clip-Bereiche mit Tabs in der Panel-Kopfzeile: **Verlauf**, **Warteschlange**, **Papierkorb**
+- Warteschlange — ein separater temporärer Bereich: Clips per **+** auf der Karte vormerken, zum Tab „Warteschlange“ wechseln und nacheinander einfügen. Ein eingefügter Clip verlässt die Warteschlange, bleibt aber im Verlauf (konfigurierbar); die Warteschlange übersteht Neustarts.
 - Suche + Regex + layoutunabhängige Suche
 - Schnellauswahl: Modifikatoren + 1…0
 - Anheften, Umbenennen, bis 100 000 Einträge, ausgeschlossene Apps
-- Tray, Autostart, OCR, Hot Edge, Kopier-Sound
+- Tray, Autostart, Hot Edge, Kopier-Sound
+
+## OCR
+
+Funktioniert offline ab Werk — nichts zu installieren, nichts herunterzuladen. Zuerst wird die System-Engine verwendet (Apple Vision unter macOS, Windows OCR unter Windows), andernfalls das integrierte PP-OCRv5-Modell (Lateinisch + Kyrillisch) auf ONNX Runtime; es ist in die ausführbare Datei eingebettet und wird beim ersten Einsatz entpackt.
+
+Jede Bildkarte hat eine **OCR**-Schaltfläche: Sie öffnet das Bild in einer Bereichsauswahl — Rahmen aufziehen, an den Griffen anpassen, mit dem Mausrad zoomen (die Ansicht folgt der Auswahl). Der erkannte Text landet in der Zwischenablage und als separate Textkarte im Verlauf. Erneutes Drücken — neue Bereichsauswahl.
 
 ## Build
 

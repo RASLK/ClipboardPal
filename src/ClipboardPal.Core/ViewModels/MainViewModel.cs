@@ -29,7 +29,6 @@ public sealed partial class MainViewModel : ObservableObject
     public ObservableCollection<ClipItem> Items { get; }
     public ObservableCollection<ClipItem> FilteredItems { get; } = [];
     public ObservableCollection<ClipItem> TrashItems { get; } = [];
-    public ClipQueueService Queue => _queue;
     public LocView Loc { get; }
 
     [ObservableProperty]
@@ -39,8 +38,9 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool _searchHasError;
 
+    /// <summary>Which of the three clip spaces the panel is showing.</summary>
     [ObservableProperty]
-    private bool _showTrash;
+    private PanelSpace _space;
 
     public bool UseRegex
     {
@@ -56,11 +56,51 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     public bool IsEmpty => FilteredItems.Count == 0;
-    public string EmptyMessage => ShowTrash ? _l10n["empty.trash"] : _l10n["empty"];
+
+    public string EmptyMessage => Space switch
+    {
+        PanelSpace.Trash => _l10n["empty.trash"],
+        PanelSpace.Queue => _l10n["empty.queue"],
+        _ => _l10n["empty"]
+    };
+
+    public string EmptyIcon => Space switch
+    {
+        PanelSpace.Trash => "🗑",
+        PanelSpace.Queue => "📥",
+        _ => "📋"
+    };
+
     public bool ShowClipMenuButtons => _settings.ShowClipMenuButtons;
     public bool IsQuickSelectActive => _quickSelectActive;
     public int QueueCount => _queue.Items.Count;
     public bool HasQueueItems => _queue.Items.Count > 0;
+
+    public bool IsHistorySpace => Space == PanelSpace.History;
+    public bool IsQueueSpace => Space == PanelSpace.Queue;
+    public bool IsTrashSpace => Space == PanelSpace.Trash;
+
+    /// <summary>Item count of the space on screen, shown next to the tabs.</summary>
+    public int SpaceCount => Space switch
+    {
+        PanelSpace.Trash => TrashItems.Count,
+        PanelSpace.Queue => _queue.Items.Count,
+        _ => Items.Count
+    };
+
+    public string SpaceCountTooltip => Space switch
+    {
+        PanelSpace.Trash => _l10n["tip.trash.count"],
+        PanelSpace.Queue => _l10n["tip.queue"],
+        _ => _l10n["tip.count"]
+    };
+
+    public string ClearTooltip => Space switch
+    {
+        PanelSpace.Trash => _l10n["tip.clear.trash"],
+        PanelSpace.Queue => _l10n["tip.clear.queue"],
+        _ => _l10n["tip.clear.history"]
+    };
 
     public event Action<ClipItem>? PasteRequested;
     public event Action? CapturedFeedback;
@@ -86,7 +126,6 @@ public sealed partial class MainViewModel : ObservableObject
         _dispatcher = dispatcher;
         _l10n = l10n;
         Loc = new LocView(l10n);
-        l10n.LanguageChanged += () => OnPropertyChanged(nameof(EmptyMessage));
 
         ClipItem.GlobalPreviewLength = settings.PreviewLength;
 
@@ -102,16 +141,44 @@ public sealed partial class MainViewModel : ObservableObject
         foreach (var item in Items)
             Attach(item);
 
+        // A queued flag on a trashed clip is stale — the queue only holds live items.
+        foreach (var t in loaded.Where(static i => i.IsInTrash && i.IsQueued))
+        {
+            t.IsQueued = false;
+            t.QueuedAt = null;
+        }
+        _queue.Restore(loaded
+            .Where(static i => i.IsQueued && !i.IsInTrash)
+            .OrderBy(static i => i.QueuedAt ?? i.CreatedAt));
+
         Items.CollectionChanged += (_, _) =>
         {
             RefreshFilter();
             OnPropertyChanged(nameof(IsEmpty));
+            OnPropertyChanged(nameof(SpaceCount));
         };
+        TrashItems.CollectionChanged += (_, _) => OnPropertyChanged(nameof(SpaceCount));
 
         _queue.Changed += () =>
         {
             OnPropertyChanged(nameof(QueueCount));
             OnPropertyChanged(nameof(HasQueueItems));
+            OnPropertyChanged(nameof(SpaceCount));
+            // Queue membership is persisted on the items themselves.
+            ScheduleSave();
+            if (Space == PanelSpace.Queue)
+                RefreshFilter();
+        };
+        // Subscribed once the collections exist: card text is refreshed item by item.
+        l10n.LanguageChanged += () =>
+        {
+            OnPropertyChanged(nameof(EmptyMessage));
+            OnPropertyChanged(nameof(SpaceCountTooltip));
+            OnPropertyChanged(nameof(ClearTooltip));
+            foreach (var item in Items)
+                item.RefreshLocalizedText();
+            foreach (var item in TrashItems)
+                item.RefreshLocalizedText();
         };
         _settings.PropertyChanged += OnSettingsChanged;
         _tray.SetVisible(_settings.ShowTrayIcon);
@@ -176,9 +243,16 @@ public sealed partial class MainViewModel : ObservableObject
         RefreshFilter();
     }
 
-    partial void OnShowTrashChanged(bool value)
+    partial void OnSpaceChanged(PanelSpace value)
     {
         OnPropertyChanged(nameof(EmptyMessage));
+        OnPropertyChanged(nameof(EmptyIcon));
+        OnPropertyChanged(nameof(IsHistorySpace));
+        OnPropertyChanged(nameof(IsQueueSpace));
+        OnPropertyChanged(nameof(IsTrashSpace));
+        OnPropertyChanged(nameof(SpaceCount));
+        OnPropertyChanged(nameof(SpaceCountTooltip));
+        OnPropertyChanged(nameof(ClearTooltip));
         RefreshFilter();
     }
 
@@ -221,7 +295,7 @@ public sealed partial class MainViewModel : ObservableObject
             item.SourceApp,
             item.LinkUrl,
             item.LinkPreviewTitle,
-            item.Type == ClipItemType.Image ? "изображение" : null
+            item.Type == ClipItemType.Image ? _l10n["type.image"] : null
         };
 
         if (UseRegex)
@@ -248,16 +322,45 @@ public sealed partial class MainViewModel : ObservableObject
 
     public void RefreshFilter()
     {
-        var source = ShowTrash ? TrashItems.AsEnumerable() : Items.Where(static i => !i.IsInTrash);
+        var source = Space switch
+        {
+            PanelSpace.Trash => TrashItems.AsEnumerable(),
+            PanelSpace.Queue => _queue.Items.Where(static i => !i.IsInTrash),
+            _ => Items.Where(static i => !i.IsInTrash)
+        };
         var matched = source.Where(Matches).Take(_settings.PopupItemLimit).ToList();
-        FilteredItems.Clear();
-        foreach (var item in matched)
-            FilteredItems.Add(item);
+        SyncFiltered(matched);
 
         if (_quickSelectActive)
             AssignSlots();
 
         OnPropertyChanged(nameof(IsEmpty));
+    }
+
+    /// <summary>
+    /// Reconciles FilteredItems with the target list instead of Clear+Add:
+    /// unchanged cards keep their controls, so typing in search does not rebuild the whole panel.
+    /// </summary>
+    private void SyncFiltered(List<ClipItem> target)
+    {
+        var keep = new HashSet<ClipItem>(target);
+        for (var i = FilteredItems.Count - 1; i >= 0; i--)
+        {
+            if (!keep.Contains(FilteredItems[i]))
+                FilteredItems.RemoveAt(i);
+        }
+
+        for (var i = 0; i < target.Count; i++)
+        {
+            if (i < FilteredItems.Count && ReferenceEquals(FilteredItems[i], target[i]))
+                continue;
+
+            var current = FilteredItems.IndexOf(target[i]);
+            if (current >= 0)
+                FilteredItems.Move(current, i);
+            else
+                FilteredItems.Insert(i, target[i]);
+        }
     }
 
     public void SetQuickSelectActive(bool active)
@@ -360,9 +463,6 @@ public sealed partial class MainViewModel : ObservableObject
         else
             Items.Add(item);
 
-        if (_settings.QueueEnabled)
-            _queue.Add(item);
-
         TrimOverflow();
         OnCapturedFeedback();
         ScheduleSave();
@@ -393,47 +493,88 @@ public sealed partial class MainViewModel : ObservableObject
                         var preview = await _linkPreview.FetchAsync(url, _cts.Token).ConfigureAwait(false);
                         if (preview is not null)
                         {
-                            item.LinkPreviewTitle = preview.Title;
-                            item.LinkPreviewDescription = preview.Description;
-                            if (string.IsNullOrWhiteSpace(item.Title))
-                                item.Title = preview.Title;
-                            ScheduleSave();
-                            RefreshFilterUi();
+                            // Item is already bound to cards — mutate observable state on the UI thread only.
+                            _dispatcher.Post(() =>
+                            {
+                                item.LinkPreviewTitle = preview.Title;
+                                item.LinkPreviewDescription = preview.Description;
+                                if (string.IsNullOrWhiteSpace(item.Title))
+                                    item.Title = preview.Title;
+                                ScheduleSave();
+                                RefreshFilter();
+                            });
                         }
                     }
                 }
             }
 
+            // OcrStatus is already set when the clip arrives from screen recognition — that pass
+            // has run, and repeating it would only overwrite the result with the same work.
             if (item.Type == ClipItemType.Image &&
+                item.OcrStatus == OcrStatus.None &&
                 _settings.RecognizeTextOnImages &&
-                _settings.PermissionScreenRecording &&
                 item.ImagePath is not null)
             {
-                var text = await _ocr.RecognizeAsync(item.ImagePath, _cts.Token).ConfigureAwait(false);
-                if (!string.IsNullOrWhiteSpace(text))
+                _dispatcher.Post(() => item.OcrStatus = OcrStatus.Running);
+
+                var result = await _ocr.RecognizeAsync(item.ImagePath, _cts.Token).ConfigureAwait(false);
+                var recognized = result.Outcome == OcrOutcome.Success ? result.Text : null;
+
+                _dispatcher.Post(() =>
                 {
-                    item.OcrText = text;
-                    if (string.IsNullOrWhiteSpace(item.Title))
+                    if (!string.IsNullOrWhiteSpace(recognized))
                     {
-                        var line = text.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? text;
-                        item.Title = line.Length > 48 ? line[..48] + "…" : line;
+                        item.OcrText = recognized;
+                        item.OcrError = null;
+                        item.OcrStatus = OcrStatus.Done;
+                        if (string.IsNullOrWhiteSpace(item.Title))
+                        {
+                            var line = recognized.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? recognized;
+                            item.Title = line.Length > 48 ? line[..48] + "…" : line;
+                        }
+                        ScheduleSave();
                     }
-                    ScheduleSave();
-                    RefreshFilterUi();
-                }
+                    else if (result.Outcome is OcrOutcome.Success or OcrOutcome.NoText)
+                    {
+                        item.OcrStatus = OcrStatus.NoText;
+                    }
+                    else
+                    {
+                        item.OcrStatus = OcrStatus.Failed;
+                        item.OcrError = result.Error;
+                    }
+
+                    RefreshFilter();
+                });
             }
         }
-        catch
+        catch (OperationCanceledException)
         {
-            // enrichment is best-effort
+            // Shutting down.
+        }
+        catch (Exception ex)
+        {
+            // Enrichment is best-effort, but a card must never stay stuck on "recognizing".
+            _dispatcher.Post(() =>
+            {
+                if (item.OcrStatus != OcrStatus.Running)
+                    return;
+                item.OcrStatus = OcrStatus.Failed;
+                item.OcrError = ex.Message;
+            });
         }
     }
 
-    private void RefreshFilterUi() =>
-        _dispatcher.Post(RefreshFilter);
-
     public void RequestPaste(ClipItem item)
     {
+        // Activating a trashed clip from any path (click, Enter, quick slot) restores it —
+        // pasting deleted content would betray the trash space's contract.
+        if (item.IsInTrash)
+        {
+            Restore(item);
+            return;
+        }
+
         MarkUsed(item);
         PasteRequested?.Invoke(item);
     }
@@ -459,6 +600,23 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (item is null) return;
 
+        // In the queue space the bin only takes the clip out of the queue — the clip itself
+        // lives in history and deleting it for real from here would be a nasty surprise.
+        if (Space == PanelSpace.Queue)
+        {
+            _queue.Remove(item);
+            return;
+        }
+
+        DeleteCore(item);
+        ScheduleSave();
+        RefreshFilter();
+    }
+
+    private void DeleteCore(ClipItem item)
+    {
+        _queue.Remove(item);
+
         if (_settings.SkipTrash || item.IsInTrash)
         {
             Items.Remove(item);
@@ -473,9 +631,6 @@ public sealed partial class MainViewModel : ObservableObject
             item.IsPinned = false;
             TrashItems.Insert(0, item);
         }
-
-        ScheduleSave();
-        RefreshFilter();
     }
 
     [RelayCommand]
@@ -502,31 +657,60 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Rename(ClipItem? item)
-    {
-        if (item is not null)
-            item.IsEditing = true;
-    }
+    private void Rename(ClipItem? item) => item?.BeginEdit();
 
     [RelayCommand]
-    private void AddToQueue(ClipItem? item)
+    private void ToggleQueue(ClipItem? item)
     {
         if (item is null || item.IsInTrash) return;
-        _queue.Add(item);
+        _queue.Toggle(item);
     }
 
+    /// <summary>Takes a pasted clip out of the queue; it stays in history.</summary>
+    public void ConsumeFromQueue(ClipItem item) => _queue.Remove(item);
+
     [RelayCommand]
-    private void ClearQueue() => _queue.Clear();
+    private void SetSpace(PanelSpace space) => Space = space;
 
     [RelayCommand]
     private void ClearUnpinned()
     {
-        foreach (var item in Items.Where(static i => !i.IsPinned).ToList())
-            Delete(item);
+        if (Space == PanelSpace.Queue)
+        {
+            _queue.Clear();
+            return;
+        }
+
+        if (Space == PanelSpace.Trash)
+        {
+            // In trash view the clear button empties the trash permanently.
+            foreach (var item in TrashItems.ToList())
+            {
+                TrashItems.Remove(item);
+                item.IsInTrash = false;
+                HistoryStore.DeleteImage(item);
+            }
+            ScheduleSave();
+            RefreshFilter();
+            return;
+        }
+
+        ClearHistoryUnpinned();
     }
 
-    [RelayCommand]
-    private void ToggleTrashView() => ShowTrash = !ShowTrash;
+    /// <summary>
+    /// Clears unpinned history regardless of which space the panel shows. The tray's
+    /// "Clear history" goes through here — it must never empty the trash or the queue just
+    /// because that tab happened to be open last.
+    /// </summary>
+    public void ClearHistoryUnpinned()
+    {
+        foreach (var item in Items.Where(static i => !i.IsPinned).ToList())
+            DeleteCore(item);
+
+        ScheduleSave();
+        RefreshFilter();
+    }
 
     public async Task ClearAllHistoryAsync(CancellationToken cancellationToken = default)
     {
@@ -538,24 +722,55 @@ public sealed partial class MainViewModel : ObservableObject
         foreach (var item in TrashItems.ToList())
         {
             TrashItems.Remove(item);
+            // The flag guards RestoreCommand: a stale card click must not resurrect a clip
+            // whose image file is already gone.
+            item.IsInTrash = false;
             HistoryStore.DeleteImage(item);
         }
         _queue.Clear();
         ScheduleSave();
+        // The panel can still be visible (settings opened from the tray) — drop the stale cards.
+        RefreshFilter();
         await SaveNowAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    private const int TrashRetentionDays = 30;
+
     private void ApplyRetention()
     {
+        var changed = false;
+
         foreach (var item in HistoryRetentionHelper.Expired(Items, _settings.HistoryRetention, DateTime.Now).ToList())
-            Delete(item);
+        {
+            DeleteCore(item);
+            changed = true;
+        }
+
+        // Trash is not covered by the history retention setting — purge it on its own schedule.
+        var trashCutoff = DateTime.Now.AddDays(-TrashRetentionDays);
+        foreach (var item in TrashItems.Where(i => i.TrashedAt is { } t && t < trashCutoff).ToList())
+        {
+            TrashItems.Remove(item);
+            HistoryStore.DeleteImage(item);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            ScheduleSave();
+            RefreshFilter();
+        }
     }
 
     private async Task RetentionLoopAsync(CancellationToken cancellationToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromHours(1));
         while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
-            ApplyRetention();
+        {
+            // The tick resumes on a thread-pool thread, but ApplyRetention edits Items/TrashItems
+            // and reconciles FilteredItems, which the panel is bound to — UI thread only.
+            _dispatcher.Post(ApplyRetention);
+        }
     }
 
     private void MoveToTop(ClipItem item)
@@ -580,11 +795,19 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void TrimOverflow()
     {
+        var trimmed = false;
         while (Items.Count > _settings.MaxHistoryItems)
         {
             var victim = Items.LastOrDefault(static i => !i.IsPinned);
             if (victim is null) break;
-            Delete(victim);
+            DeleteCore(victim);
+            trimmed = true;
+        }
+
+        if (trimmed)
+        {
+            ScheduleSave();
+            RefreshFilter();
         }
     }
 
@@ -600,8 +823,26 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    public Task SaveNowAsync(CancellationToken cancellationToken = default) =>
-        _store.SaveAsync(Items.Concat(TrashItems), cancellationToken);
+    public async Task SaveNowAsync(CancellationToken cancellationToken = default)
+    {
+        // Items/TrashItems are UI-thread state: enumerating them from the debounce loop's pool
+        // thread races card mutations and can silently lose a save. Snapshot on the UI thread.
+        // When already there (shutdown path), snapshot inline — the dispatcher may stop pumping
+        // before a queued callback would ever run.
+        List<ClipItem> snapshot;
+        if (_dispatcher.CheckAccess())
+        {
+            snapshot = [.. Items, .. TrashItems];
+        }
+        else
+        {
+            List<ClipItem> captured = [];
+            await _dispatcher.InvokeAsync(() => captured = [.. Items, .. TrashItems]).ConfigureAwait(false);
+            snapshot = captured;
+        }
+
+        await _store.SaveAsync(snapshot, cancellationToken).ConfigureAwait(false);
+    }
 
     public async ValueTask DisposeAsync()
     {
