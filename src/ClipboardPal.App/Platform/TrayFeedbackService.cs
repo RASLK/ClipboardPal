@@ -21,6 +21,37 @@ public sealed class TrayFeedbackService : ITrayFeedbackService
             _tray.IsVisible = visible;
     }
 
+    /// <summary>
+    /// Shows a short-lived message in the tray tooltip. Used by flows that have no window open
+    /// to report into, such as screen-region recognition.
+    /// </summary>
+    public void ShowMessage(string message, int seconds = 6)
+    {
+        if (_tray is null) return;
+
+        _animCts?.Cancel();
+        _animCts = new CancellationTokenSource();
+        var token = _animCts.Token;
+
+        _tray.ToolTipText = message;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(seconds), token).ConfigureAwait(false);
+                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (_tray is not null)
+                        _tray.ToolTipText = _baseTip;
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                // Replaced by a newer message.
+            }
+        }, token);
+    }
+
     public void AnimateCopy()
     {
         if (_tray is null) return;

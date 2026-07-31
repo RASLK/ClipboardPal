@@ -65,18 +65,18 @@
 
             <StackPanel Spacing="6">
               <TextBlock Classes="row-title" Text="{Binding Loc[row.dock]}" />
-              <WrapPanel ItemWidth="140" ItemHeight="28">
-                <RadioButton GroupName="Dock" Margin="0,0,8,4"
-                             Content="{Binding Loc[dock.left], StringFormat='⬅ {0}'}"
+              <WrapPanel>
+                <RadioButton GroupName="Dock" Margin="0,0,16,4" MinWidth="120"
+                             Content="{Binding Loc[dock.left], StringFormat='← {0}'}"
                              IsChecked="{Binding Settings.PanelDock, Converter={StaticResource EnumMatch}, ConverterParameter=Left}" />
-                <RadioButton GroupName="Dock" Margin="0,0,8,4"
-                             Content="{Binding Loc[dock.right], StringFormat='➡ {0}'}"
+                <RadioButton GroupName="Dock" Margin="0,0,16,4" MinWidth="120"
+                             Content="{Binding Loc[dock.right], StringFormat='→ {0}'}"
                              IsChecked="{Binding Settings.PanelDock, Converter={StaticResource EnumMatch}, ConverterParameter=Right}" />
-                <RadioButton GroupName="Dock" Margin="0,0,8,4"
-                             Content="{Binding Loc[dock.top], StringFormat='⬆ {0}'}"
+                <RadioButton GroupName="Dock" Margin="0,0,16,4" MinWidth="120"
+                             Content="{Binding Loc[dock.top], StringFormat='↑ {0}'}"
                              IsChecked="{Binding Settings.PanelDock, Converter={StaticResource EnumMatch}, ConverterParameter=Top}" />
-                <RadioButton GroupName="Dock" Margin="0,0,8,4"
-                             Content="{Binding Loc[dock.bottom], StringFormat='⬇ {0}'}"
+                <RadioButton GroupName="Dock" Margin="0,0,16,4" MinWidth="120"
+                             Content="{Binding Loc[dock.bottom], StringFormat='↓ {0}'}"
                              IsChecked="{Binding Settings.PanelDock, Converter={StaticResource EnumMatch}, ConverterParameter=Bottom}" />
               </WrapPanel>
             </StackPanel>
@@ -287,22 +287,14 @@
         <TextBlock Classes="section-title" Text="{Binding Loc[sec.queue]}" Margin="0,6,0,0" />
         <Border Classes="section-card">
           <StackPanel Spacing="14">
+            <TextBlock Classes="row-hint" Text="{Binding Loc[hint.queue]}" Margin="0,0,0,0" />
             <Grid ColumnDefinitions="*,Auto">
               <StackPanel Margin="0,0,8,0">
-                <TextBlock Classes="row-title" Text="{Binding Loc[row.queue]}" />
-                <TextBlock Classes="row-hint" Text="{Binding Loc[hint.queue]}" />
+                <TextBlock Classes="row-title" Text="{Binding Loc[row.queue.autoremove]}" />
+                <TextBlock Classes="row-hint" Text="{Binding Loc[hint.queue.autoremove]}" />
               </StackPanel>
-              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.QueueEnabled}" />
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.QueueRemoveAfterPaste}" />
             </Grid>
-            <StackPanel Spacing="6" IsEnabled="{Binding Settings.QueueEnabled}">
-              <TextBlock Classes="row-title" Text="{Binding Loc[row.queue.mode]}" />
-              <ComboBox SelectedIndex="{Binding Settings.QueuePasteMode, Converter={StaticResource EnumInt}, ConverterParameter=QueuePasteMode}">
-                <ComboBoxItem Content="Insert new" />
-                <ComboBoxItem Content="Append" />
-                <ComboBoxItem Content="Sequential" />
-                <ComboBoxItem Content="First" />
-              </ComboBox>
-            </StackPanel>
           </StackPanel>
         </Border>
 
@@ -329,9 +321,19 @@
               </StackPanel>
               <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.SkipTrash}" />
             </Grid>
-            <Grid ColumnDefinitions="*,Auto">
-              <TextBlock Classes="row-title" Text="{Binding Loc[row.ocr]}" />
-              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.RecognizeTextOnImages}" />
+            <Grid ColumnDefinitions="*,Auto,Auto" RowDefinitions="Auto,Auto">
+              <StackPanel Margin="0,0,8,0" VerticalAlignment="Center">
+                <TextBlock Classes="row-title" Text="{Binding Loc[row.ocr]}" />
+                <TextBlock Classes="row-hint" Text="{Binding Loc[hint.ocr]}" />
+              </StackPanel>
+              <Button Grid.Column="1" Content="{Binding Loc[btn.check]}"
+                      Command="{Binding CheckOcrCommand}"
+                      Padding="12,6" Margin="0,0,8,0" VerticalAlignment="Center" />
+              <ToggleSwitch Grid.Column="2" IsChecked="{Binding Settings.RecognizeTextOnImages}" />
+              <TextBlock Grid.Row="1" Grid.ColumnSpan="3"
+                         Text="{Binding OcrStatus}" Foreground="{DynamicResource TextMutedBrush}"
+                         FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0"
+                         IsVisible="{Binding OcrStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             </Grid>
             <Grid ColumnDefinitions="*,Auto">
               <TextBlock Classes="row-title" Text="{Binding Loc[row.duplicates]}" />
@@ -398,13 +400,13 @@
               <TextBlock Classes="row-title" Text="{Binding Loc[row.retention]}" />
               <TextBlock Classes="row-hint" Text="{Binding Loc[hint.retention]}" />
               <ComboBox SelectedIndex="{Binding Settings.HistoryRetention, Converter={StaticResource EnumInt}, ConverterParameter=HistoryRetention}">
-                <ComboBoxItem Content="1 day" />
-                <ComboBoxItem Content="1 week" />
-                <ComboBoxItem Content="1 month" />
-                <ComboBoxItem Content="3 months" />
-                <ComboBoxItem Content="6 months" />
-                <ComboBoxItem Content="1 year" />
-                <ComboBoxItem Content="Forever" />
+                <ComboBoxItem Content="{Binding Loc[ret.day]}" />
+                <ComboBoxItem Content="{Binding Loc[ret.week]}" />
+                <ComboBoxItem Content="{Binding Loc[ret.month]}" />
+                <ComboBoxItem Content="{Binding Loc[ret.3months]}" />
+                <ComboBoxItem Content="{Binding Loc[ret.6months]}" />
+                <ComboBoxItem Content="{Binding Loc[ret.year]}" />
+                <ComboBoxItem Content="{Binding Loc[ret.forever]}" />
               </ComboBox>
             </StackPanel>
 

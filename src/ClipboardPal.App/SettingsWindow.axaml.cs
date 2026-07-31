@@ -1,7 +1,9 @@
+using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using ClipboardPal.Core.ViewModels;
 
 namespace ClipboardPal;
@@ -16,11 +18,33 @@ public partial class SettingsWindow : Window
         _vm = vm;
         DataContext = vm;
 
+        _vm.Loc.PropertyChanged += OnLocalizationChanged;
+
         Closed += async (_, _) =>
         {
+            _vm.Loc.PropertyChanged -= OnLocalizationChanged;
             _vm.CancelHotkeyCaptureCommand.Execute(null);
             await _vm.SaveAsync();
         };
+    }
+
+    private void OnLocalizationChanged(object? sender, PropertyChangedEventArgs e) =>
+        RefreshSelectedComboBoxText();
+
+    /// <summary>
+    /// A ComboBox copies the selected item's text once, when the selection changes, so the closed
+    /// box would keep the old language after a live switch. Re-selecting the same index makes it
+    /// take a fresh copy (the index converter ignores the intermediate -1).
+    /// </summary>
+    private void RefreshSelectedComboBoxText()
+    {
+        foreach (var combo in this.GetVisualDescendants().OfType<ComboBox>())
+        {
+            var selected = combo.SelectedIndex;
+            if (selected < 0) continue;
+            combo.SelectedIndex = -1;
+            combo.SelectedIndex = selected;
+        }
     }
 
     protected override void OnOpened(EventArgs e)

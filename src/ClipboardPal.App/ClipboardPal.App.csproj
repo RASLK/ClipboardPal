@@ -26,8 +26,18 @@
     <PackageReference Include="SharpHook" Version="5.3.9" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.7" />
     <PackageReference Include="System.Windows.Extensions" Version="9.0.7" />
-    <PackageReference Include="TesseractOCR" Version="5.5.2" />
+    <!-- Offline OCR engine. Pulls SkiaSharp 3.x, which Avalonia 11.3 runs on fine.
+         ExcludeAssets="build" drops the package's targets that would copy its own models next
+         to the binary: ours are embedded in the assembly and also cover Cyrillic. -->
+    <PackageReference Include="RapidOcrNet" Version="3.0.0" ExcludeAssets="build" />
   </ItemGroup>
+
+  <!-- OCR models travel inside the assembly so a single-file build stays self-contained;
+       they are unpacked next to the history on first use. -->
+  <ItemGroup>
+    <EmbeddedResource Include="OcrModels\*" />
+  </ItemGroup>
+
 
   <ItemGroup>
     <ProjectReference Include="..\ClipboardPal.Core\ClipboardPal.Core.csproj" />
@@ -51,14 +61,5 @@
     <DebugSymbols>false</DebugSymbols>
     <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
   </PropertyGroup>
-
-  <!-- Ship Windows tesseract CLI next to natives for OCR fallback outside NuGet cache.
-       Only for non-single-file / framework-dependent local publishes; OCR also bootstraps at runtime. -->
-  <ItemGroup Condition="'$(PublishSingleFile)' != 'true' And Exists('$(NuGetPackageRoot)tesseractocr\5.5.2\x64\tesseract.exe')">
-    <None Include="$(NuGetPackageRoot)tesseractocr\5.5.2\x64\tesseract.exe">
-      <Link>x64\tesseract.exe</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
 
 </Project>

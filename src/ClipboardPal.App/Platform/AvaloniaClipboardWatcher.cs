@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
@@ -27,6 +28,11 @@ public sealed class AvaloniaClipboardWatcher : IClipboardWatcher
     private string? _lastHash;
     private object? _windowsListener;
     private int _captureBusy;
+
+    /// <summary>
+    /// The bitmap currently promised to the OS clipboard. See <see cref="SetImageAsync"/>.
+    /// </summary>
+    private Bitmap? _clipboardBitmap;
 
     public event Action<ClipItem>? ItemCaptured;
 
@@ -66,6 +72,13 @@ public sealed class AvaloniaClipboardWatcher : IClipboardWatcher
         }).WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Puts an image on the clipboard.
+    /// The bitmap must outlive this call: platforms hand the clipboard a promise and only encode
+    /// the pixels when something actually reads them (on macOS <c>pasteboardPropertyListForType:</c>
+    /// calls back into <c>Bitmap.Save</c> at paste time). Disposing it here would fault the process
+    /// on the next paste, so the instance is released only once a newer image has replaced it.
+    /// </summary>
     public async Task SetImageAsync(byte[] pngBytes, CancellationToken cancellationToken = default)
     {
         SuppressFor(TimeSpan.FromMilliseconds(800));
@@ -73,9 +86,29 @@ public sealed class AvaloniaClipboardWatcher : IClipboardWatcher
         {
             var clipboard = GetClipboard();
             if (clipboard is null) return;
-            await using var ms = new MemoryStream(pngBytes);
-            using var bitmap = new Bitmap(ms);
-            await clipboard.SetBitmapAsync(bitmap).ConfigureAwait(false);
+
+            Bitmap bitmap;
+            using (var ms = new MemoryStream(pngBytes))
+                bitmap = new Bitmap(ms);
+
+            var previous = _clipboardBitmap;
+            _clipboardBitmap = bitmap;
+
+            try
+            {
+                await clipboard.SetBitmapAsync(bitmap).ConfigureAwait(true);
+            }
+            catch
+            {
+                // The clipboard still holds whatever was there before.
+                _clipboardBitmap = previous;
+                bitmap.Dispose();
+                throw;
+            }
+
+            // The clipboard has a new owner now, so the previous promise is never queried again.
+            // Both this and the promise callback run on the UI thread, so they cannot interleave.
+            previous?.Dispose();
         }).WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -119,11 +152,6 @@ public sealed class AvaloniaClipboardWatcher : IClipboardWatcher
             if (!_settings.ClipboardMonitoringEnabled || !_settings.PermissionClipboardRead)
                 return;
 
-            var sourceApp = _foreground.GetForegroundProcessName();
-            if (sourceApp is not null &&
-                _settings.ExcludedProcessNames().Contains(sourceApp.ToLowerInvariant()))
-                return;
-
             string? text = null;
             for (var attempt = 0; attempt < 3 && text is null; attempt++)
             {
@@ -137,7 +165,16 @@ public sealed class AvaloniaClipboardWatcher : IClipboardWatcher
             {
                 var hash = HistoryStore.Sha256Text(text);
                 if (hash == _lastHash) return;
+                // Recorded before the exclusion check so the same content never re-triggers the
+                // source-app lookup on every poll tick. Cost: content skipped because an excluded
+                // app was frontmost stays skipped until the clipboard changes, even if the user
+                // copies it again from an allowed app. Re-checking instead would capture excluded
+                // content as soon as the user switched apps, which is the worse failure.
                 _lastHash = hash;
+
+                var sourceApp = await GetSourceAppAsync().ConfigureAwait(true);
+                if (IsExcluded(sourceApp))
+                    return;
 
                 ItemCaptured?.Invoke(new ClipItem
                 {
@@ -160,6 +197,10 @@ public sealed class AvaloniaClipboardWatcher : IClipboardWatcher
             if (imageHash == _lastHash) return;
             _lastHash = imageHash;
 
+            var imageSourceApp = await GetSourceAppAsync().ConfigureAwait(true);
+            if (IsExcluded(imageSourceApp))
+                return;
+
             var path = _store.NewImagePath();
             await File.WriteAllBytesAsync(path, png, _cts.Token).ConfigureAwait(true);
 
@@ -168,7 +209,7 @@ public sealed class AvaloniaClipboardWatcher : IClipboardWatcher
                 Type = ClipItemType.Image,
                 ImagePath = path,
                 Hash = imageHash,
-                SourceApp = sourceApp
+                SourceApp = imageSourceApp
             });
         }
         catch
@@ -176,6 +217,17 @@ public sealed class AvaloniaClipboardWatcher : IClipboardWatcher
             // Clipboard busy / unsupported format.
         }
     }
+
+    /// <summary>
+    /// Resolving the frontmost app spawns a helper process on macOS/Linux (osascript/xdotool)
+    /// and can take hundreds of milliseconds — never run it on the UI thread.
+    /// </summary>
+    private Task<string?> GetSourceAppAsync() =>
+        Task.Run(_foreground.GetForegroundProcessName);
+
+    private bool IsExcluded(string? sourceApp) =>
+        sourceApp is not null &&
+        _settings.ExcludedProcessNames().Contains(sourceApp.ToLowerInvariant());
 
     private async Task<string?> TryReadTextAsync()
     {
@@ -236,6 +288,8 @@ public sealed class AvaloniaClipboardWatcher : IClipboardWatcher
         await _cts.CancelAsync().ConfigureAwait(false);
         _cts.Dispose();
         (_windowsListener as IDisposable)?.Dispose();
+        // _clipboardBitmap is deliberately left alone: the OS may still ask for its bytes while
+        // the process shuts down, and the memory goes away with the process anyway.
     }
 }
 

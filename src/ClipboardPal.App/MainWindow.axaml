@@ -32,14 +32,15 @@
                      VerticalAlignment="Center"
                      x:Name="HintText" />
 
+          <!-- BorderBrush lives in the Border#SearchBorder style: a local value here would
+               outrank the :focus-within setter and kill the focus ring. -->
           <Border Background="{DynamicResource FieldBrush}"
-                  BorderBrush="{DynamicResource FieldBorderBrush}"
                   BorderThickness="1" CornerRadius="10" Padding="12,0,8,0"
                   Width="440" Height="40"
                   VerticalAlignment="Center"
                   x:Name="SearchBorder">
             <Grid ColumnDefinitions="Auto,*,Auto">
-              <TextBlock Text="⌕" FontSize="15" VerticalAlignment="Center" Margin="0,0,10,0"
+              <TextBlock Text="⌕" FontSize="19" VerticalAlignment="Center" Margin="0,0,10,0"
                          Foreground="{DynamicResource TextMutedBrush}" />
               <TextBox x:Name="SearchBox" Grid.Column="1"
                        Watermark="{Binding Loc[search.watermark]}"
@@ -57,24 +58,48 @@
           </Border>
         </StackPanel>
 
+        <!-- Space switcher: the panel shows one of three clip spaces at a time -->
+        <Border Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                Background="{DynamicResource FieldBrush}"
+                BorderBrush="{DynamicResource FieldBorderBrush}" BorderThickness="1"
+                CornerRadius="10" Padding="3" Margin="12,0">
+          <StackPanel Orientation="Horizontal" Spacing="2">
+            <Button Classes="seg" Classes.active="{Binding IsHistorySpace}"
+                    Content="{Binding Loc[tab.history]}"
+                    Command="{Binding SetSpaceCommand}"
+                    CommandParameter="{x:Static m:PanelSpace.History}" />
+            <Button Classes="seg" Classes.active="{Binding IsQueueSpace}"
+                    Command="{Binding SetSpaceCommand}"
+                    CommandParameter="{x:Static m:PanelSpace.Queue}"
+                    ToolTip.Tip="{Binding Loc[tip.queue.tab]}">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Text="{Binding Loc[tab.queue]}" VerticalAlignment="Center" />
+                <Border Classes="count-pill" IsVisible="{Binding HasQueueItems}">
+                  <TextBlock Text="{Binding QueueCount}" />
+                </Border>
+              </StackPanel>
+            </Button>
+            <Button Classes="seg" Classes.active="{Binding IsTrashSpace}"
+                    Content="{Binding Loc[tab.trash]}"
+                    Command="{Binding SetSpaceCommand}"
+                    CommandParameter="{x:Static m:PanelSpace.Trash}" />
+          </StackPanel>
+        </Border>
+
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8"
                     VerticalAlignment="Center" HorizontalAlignment="Right">
-          <TextBlock Text="{Binding Items.Count, StringFormat='{}{0}'}"
-                     Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
-                     VerticalAlignment="Center"
-                     ToolTip.Tip="{Binding Loc[tip.count]}" />
-          <TextBlock Text="{Binding QueueCount, StringFormat='Q:{0}'}"
-                     Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
-                     VerticalAlignment="Center"
-                     IsVisible="{Binding HasQueueItems}"
-                     ToolTip.Tip="{Binding Loc[tip.queue]}" />
-          <Button Content="{Binding Loc[btn.trash]}" Command="{Binding ToggleTrashViewCommand}"
-                  Padding="14,8" MinHeight="36" VerticalAlignment="Center"
-                  ToolTip.Tip="{Binding Loc[tip.trash]}" />
+          <Border Background="{DynamicResource FieldBrush}" CornerRadius="9"
+                  Padding="10,0" Height="36" VerticalAlignment="Center"
+                  ToolTip.Tip="{Binding SpaceCountTooltip}">
+            <TextBlock Text="{Binding SpaceCount}"
+                       Foreground="{DynamicResource TextMutedBrush}" FontSize="12.5"
+                       VerticalAlignment="Center" HorizontalAlignment="Center" />
+          </Border>
           <Button Content="{Binding Loc[btn.clear]}" Command="{Binding ClearUnpinnedCommand}"
-                  Padding="14,8" MinHeight="36" VerticalAlignment="Center" />
+                  Padding="14,8" MinHeight="36" VerticalAlignment="Center"
+                  ToolTip.Tip="{Binding ClearTooltip}" />
           <Button Content="⚙" Click="Settings_Click"
-                  Padding="12,8" MinHeight="36" MinWidth="40" VerticalAlignment="Center"
+                  FontSize="17" Padding="12,4" MinHeight="36" MinWidth="40" VerticalAlignment="Center"
                   ToolTip.Tip="{Binding Loc[tip.settings]}" />
         </StackPanel>
       </Grid>
@@ -92,15 +117,15 @@
             <DataTemplate x:DataType="m:ClipItem">
               <Panel Width="168" Height="178">
                 <Border Width="168" Height="168" Margin="0,10,0,0"
-                        Background="{DynamicResource CardBrush}"
-                        BorderBrush="{Binding IsSelected, Converter={StaticResource SelectedBrush}}"
+                        Classes="clip-card"
+                        Classes.selected="{Binding IsSelected}"
                         BorderThickness="1.5" CornerRadius="10"
                         ClipToBounds="True"
                         Cursor="Hand"
                         PointerReleased="Card_PointerReleased"
                         Tag="{Binding}">
                   <Grid Margin="8" RowDefinitions="Auto,*,Auto">
-                    <Grid ColumnDefinitions="*,Auto">
+                    <Grid ColumnDefinitions="*,Auto,Auto">
                       <TextBlock Text="{Binding DisplayTitle}" FontSize="11" FontWeight="SemiBold"
                                  Foreground="{DynamicResource TextBrush}" TextTrimming="CharacterEllipsis"
                                  IsVisible="{Binding !IsEditing}" />
@@ -109,7 +134,16 @@
                                IsVisible="{Binding IsEditing}"
                                KeyDown="TitleEditor_KeyDown"
                                LostFocus="TitleEditor_LostFocus" />
-                      <TextBlock Grid.Column="1" Text="📌" FontSize="11" Margin="4,0,0,0"
+                      <!-- Only on pictures: picks a region of the image and reads its text -->
+                      <Button Grid.Column="1" Classes="ocr-badge"
+                              Classes.done="{Binding HasOcr}"
+                              Classes.running="{Binding IsOcrRunning}"
+                              Classes.failed="{Binding IsOcrFailed}"
+                              Content="OCR" Tag="{Binding}"
+                              Click="Ocr_Click"
+                              IsVisible="{Binding IsImage}"
+                              ToolTip.Tip="{Binding OcrTooltip}" />
+                      <TextBlock Grid.Column="2" Text="📌" FontSize="11" Margin="4,0,0,0"
                                  IsVisible="{Binding IsPinned}" />
                     </Grid>
 
@@ -133,11 +167,13 @@
                                  TextTrimming="CharacterEllipsis"
                                  VerticalAlignment="Center" />
                       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="1"
+                                  Classes="card-actions"
                                   IsVisible="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).ShowClipMenuButtons}">
                         <Button Content="📌" Padding="3,2" FontSize="10" Tag="{Binding}"
                                 Click="Pin_Click" ToolTip.Tip="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Loc[tip.pin]}" />
                         <Button Content="＋" Padding="3,2" FontSize="10" Tag="{Binding}"
-                                Click="Queue_Click" ToolTip.Tip="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Loc[tip.queue.add]}" />
+                                Classes="queue-toggle" Classes.queued="{Binding IsQueued}"
+                                Click="Queue_Click" ToolTip.Tip="{Binding QueueTooltip}" />
                         <Button Content="✏" Padding="3,2" FontSize="10" Tag="{Binding}"
                                 Click="Rename_Click" ToolTip.Tip="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Loc[tip.rename]}" />
                         <Button Content="🗑" Padding="3,2" FontSize="10" Tag="{Binding}"
@@ -161,10 +197,13 @@
         </ItemsControl>
       </ScrollViewer>
 
-      <TextBlock Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"
-                 Text="{Binding EmptyMessage}"
-                 Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
-                 IsVisible="{Binding IsEmpty}" />
+      <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                  Spacing="8" IsVisible="{Binding IsEmpty}">
+        <TextBlock Text="{Binding EmptyIcon}" FontSize="28" HorizontalAlignment="Center" Opacity="0.6" />
+        <TextBlock Text="{Binding EmptyMessage}"
+                   Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
+                   HorizontalAlignment="Center" MaxWidth="360" TextWrapping="Wrap" TextAlignment="Center" />
+      </StackPanel>
     </Grid>
   </Border>
 </Window>

@@ -47,7 +47,14 @@ public partial class App : Application
         _l10n = _services.GetRequiredService<ILocalizationService>();
         _l10n.SetLanguage(_settingsService.Settings.Language);
         _l10n.LanguageChanged += ApplyTrayLocalization;
+        RelativeTimeConverter.Localize = key => _l10n[key];
+        ClipItem.Localize = key => _l10n[key];
         ApplyTheme(_settingsService.Settings.Theme);
+        ActualThemeVariantChanged += (_, _) =>
+        {
+            if (_settingsService?.Settings.Theme == ThemeKind.System)
+                ApplyThemeDictionary(ActualThemeVariant == ThemeVariant.Light ? ThemeKind.Light : ThemeKind.Dark);
+        };
         ApplyTrayLocalization();
 
         _settingsService.Settings.PropertyChanged += (_, e) =>
@@ -105,7 +112,9 @@ public partial class App : Application
                 _clipboard,
                 _hotkeys,
                 _services.GetRequiredService<IPasteService>(),
-                OpenSettingsWindow);
+                OpenSettingsWindow,
+                _services.GetRequiredService<RegionOcrService>(),
+                _l10n);
 
             desktop.MainWindow = _mainWindow;
             _mainWindow.AttachHotkeys(_hotkeys);
@@ -134,6 +143,7 @@ public partial class App : Application
         services.AddSingleton<IPasteService, PlatformPasteService>();
         services.AddSingleton<IAutostartService, PlatformAutostartService>();
         services.AddSingleton<IClipboardWatcher, AvaloniaClipboardWatcher>();
+        services.AddSingleton<RegionOcrService>();
         services.AddSingleton<SharpHookHotkeyService>();
         services.AddSingleton<IGlobalHotkeyService>(sp => sp.GetRequiredService<SharpHookHotkeyService>());
         services.AddSingleton<IPointerTracker>(sp => sp.GetRequiredService<SharpHookHotkeyService>());
@@ -142,6 +152,15 @@ public partial class App : Application
 
     public void ApplyTheme(ThemeKind theme)
     {
+        // Set the variant first: for System it resolves to the OS theme, and the
+        // brush dictionary below must follow the resolved value, not the stale one.
+        RequestedThemeVariant = theme switch
+        {
+            ThemeKind.Light => ThemeVariant.Light,
+            ThemeKind.Dark => ThemeVariant.Dark,
+            _ => ThemeVariant.Default
+        };
+
         var effective = theme switch
         {
             ThemeKind.System => ActualThemeVariant == ThemeVariant.Light
@@ -150,21 +169,20 @@ public partial class App : Application
             _ => theme
         };
 
+        ApplyThemeDictionary(effective);
+    }
+
+    private void ApplyThemeDictionary(ThemeKind effective)
+    {
         var uri = effective == ThemeKind.Dark
             ? "avares://ClipboardPal/Themes/Dark.axaml"
             : "avares://ClipboardPal/Themes/Light.axaml";
 
+        var dictionary = (ResourceDictionary)AvaloniaXamlLoader.Load(new Uri(uri))!;
         if (Resources.MergedDictionaries.Count > 0)
-            Resources.MergedDictionaries[0] = (ResourceDictionary)AvaloniaXamlLoader.Load(new Uri(uri))!;
+            Resources.MergedDictionaries[0] = dictionary;
         else
-            Resources.MergedDictionaries.Add((ResourceDictionary)AvaloniaXamlLoader.Load(new Uri(uri))!);
-
-        RequestedThemeVariant = theme switch
-        {
-            ThemeKind.Light => ThemeVariant.Light,
-            ThemeKind.Dark => ThemeVariant.Dark,
-            _ => ThemeVariant.Default
-        };
+            Resources.MergedDictionaries.Add(dictionary);
     }
 
     private void ApplyTrayLocalization()

@@ -79,6 +79,7 @@ file static class MacForeground
             using var proc = Process.Start(psi);
             if (proc is null) return null;
             var output = proc.StandardOutput.ReadToEnd();
+            proc.StandardError.ReadToEnd();
             if (!proc.WaitForExit(1500))
             {
                 try { proc.Kill(entireProcessTree: true); } catch { /* ignore */ }
@@ -161,6 +162,7 @@ file static class LinuxForeground
             using var proc = Process.Start(psi);
             if (proc is null) return null;
             var output = proc.StandardOutput.ReadToEnd();
+            proc.StandardError.ReadToEnd();
             if (!proc.WaitForExit(1500))
             {
                 try { proc.Kill(entireProcessTree: true); } catch { /* ignore */ }

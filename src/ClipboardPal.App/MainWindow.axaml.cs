@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using ClipboardPal.Core.Abstractions;
 using ClipboardPal.Core.Models;
@@ -21,6 +22,8 @@ public partial class MainWindow : Window
     private readonly IClipboardWatcher _clipboard;
     private readonly IPasteService _paste;
     private readonly Action _openSettings;
+    private readonly RegionOcrService _regionOcr;
+    private readonly ILocalizationService _l10n;
     private IGlobalHotkeyService? _hotkeys;
     private nint _pasteTarget;
     private DateTime _suppressDismissUntil;
@@ -31,13 +34,17 @@ public partial class MainWindow : Window
         IClipboardWatcher clipboard,
         IGlobalHotkeyService hotkeys,
         IPasteService paste,
-        Action openSettings)
+        Action openSettings,
+        RegionOcrService regionOcr,
+        ILocalizationService l10n)
     {
         _viewModel = viewModel;
         _settings = settings;
         _clipboard = clipboard;
         _paste = paste;
         _openSettings = openSettings;
+        _regionOcr = regionOcr;
+        _l10n = l10n;
         InitializeComponent();
         DataContext = viewModel;
         viewModel.PasteRequested += OnPasteRequested;
@@ -120,7 +127,7 @@ public partial class MainWindow : Window
 
         HintText.Text = "ClipboardPal";
         ToolTip.SetTip(HintText,
-            $"Enter — вставить · {_settings.Hotkey.ModifiersLabel()} + цифра — быстрый слот · Esc — закрыть");
+            string.Format(_viewModel.Loc["hint.panel"], _settings.Hotkey.ModifiersLabel()));
         _viewModel.SearchText = string.Empty;
         _viewModel.RefreshFilter();
 
@@ -143,8 +150,15 @@ public partial class MainWindow : Window
         }
     }
 
+    private bool? _clipsVertical;
+
     private void ApplyClipsOrientation(bool vertical)
     {
+        // Replacing ItemsPanel rebuilds every card — skip when the orientation is unchanged.
+        if (_clipsVertical == vertical)
+            return;
+        _clipsVertical = vertical;
+
         ClipsScroll.HorizontalScrollBarVisibility = vertical
             ? ScrollBarVisibility.Disabled
             : ScrollBarVisibility.Auto;
@@ -191,26 +205,12 @@ public partial class MainWindow : Window
 
     private async Task<bool> ApplyClipActionAsync(ClipItem item, ClipAction action)
     {
-        // Queue: for paste actions, optionally consume from queue first.
-        if (_settings.QueueEnabled &&
-            _viewModel.Queue.Items.Count > 0 &&
-            action is ClipAction.Paste or ClipAction.PasteAsPlainText)
-        {
-            var queued = _viewModel.Queue.TakeNext(_settings.QueuePasteMode);
-            if (queued is not null)
-                item = queued;
-        }
-
-        var text = _viewModel.TextForAction(item, action);
-
         switch (action)
         {
             case ClipAction.Copy:
             case ClipAction.CopyAsPlainText:
                 _viewModel.MarkUsed(item);
-                if (item.Type == ClipItemType.Text || !string.IsNullOrEmpty(text))
-                    await _clipboard.SetTextAsync(text ?? string.Empty);
-                else if (!await TrySetClipboardAsync(item))
+                if (!await PutOnClipboardAsync(item, action))
                     return false;
                 if (_settings.HidePopupAfterCopy)
                     HidePanel();
@@ -219,10 +219,12 @@ public partial class MainWindow : Window
             case ClipAction.Paste:
             case ClipAction.PasteAsPlainText:
                 _viewModel.MarkUsed(item);
-                if (item.Type == ClipItemType.Text || !string.IsNullOrEmpty(text))
-                    await _clipboard.SetTextAsync(text ?? string.Empty);
-                else if (!await TrySetClipboardAsync(item))
+                if (!await PutOnClipboardAsync(item, action))
                     return false;
+                // Pasting while looking at the queue drains it: the clip goes back to
+                // being history-only. Pasting the same clip from history leaves it staged.
+                if (_viewModel.Space == PanelSpace.Queue && _settings.QueueRemoveAfterPaste)
+                    _viewModel.ConsumeFromQueue(item);
                 if (_settings.PermissionAccessibility)
                     await _paste.PasteToAsync(_pasteTarget);
                 if (_settings.HidePopupAfterPaste)
@@ -232,6 +234,32 @@ public partial class MainWindow : Window
             default:
                 return false;
         }
+    }
+
+    /// <summary>
+    /// Puts the clip on the clipboard. An image clip goes over as the image itself; its OCR text is
+    /// only what the "as plain text" actions ask for, and serves as a fallback if the file is gone.
+    /// </summary>
+    private async Task<bool> PutOnClipboardAsync(ClipItem item, ClipAction action)
+    {
+        var text = _viewModel.TextForAction(item, action);
+        var wantsText = item.Type == ClipItemType.Text ||
+                        action is ClipAction.CopyAsPlainText or ClipAction.PasteAsPlainText;
+
+        if (wantsText && !string.IsNullOrEmpty(text))
+        {
+            await _clipboard.SetTextAsync(text);
+            return true;
+        }
+
+        if (await TrySetClipboardAsync(item))
+            return true;
+
+        if (string.IsNullOrEmpty(text))
+            return false;
+
+        await _clipboard.SetTextAsync(text);
+        return true;
     }
 
     private async Task<bool> TrySetClipboardAsync(ClipItem item)
@@ -333,7 +361,7 @@ public partial class MainWindow : Window
             var item = control.Tag as ClipItem ?? control.DataContext as ClipItem;
             if (item is null || item.IsEditing) return;
 
-            if (_viewModel.ShowTrash)
+            if (_viewModel.Space == PanelSpace.Trash)
             {
                 _viewModel.RestoreCommand.Execute(item);
                 e.Handled = true;
@@ -350,6 +378,67 @@ public partial class MainWindow : Window
         if (sender is Control { Tag: ClipItem item })
             _viewModel.TogglePinCommand.Execute(item);
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Opens the region picker over the card's picture and recognizes whatever was framed.
+    /// Pressing it again simply picks a new region, replacing the previous result.
+    /// </summary>
+    private async void Ocr_Click(object? sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is not Control { Tag: ClipItem item })
+            return;
+        if (item.ImagePath is not { } path || !File.Exists(path))
+            return;
+
+        Bitmap bitmap;
+        try
+        {
+            await using var file = File.OpenRead(path);
+            bitmap = new Bitmap(file);
+        }
+        catch
+        {
+            return;
+        }
+
+        // The picker takes over the screen, so the card panel steps out of the way. It is a
+        // standalone window rather than a dialog precisely because its owner is now hidden.
+        HidePanel();
+
+        using (bitmap)
+        {
+            var picker = new RegionPickerWindow(bitmap, _l10n);
+            var closed = new TaskCompletionSource();
+            picker.Closed += (_, _) => closed.TrySetResult();
+            picker.Show();
+            picker.Activate();
+            await closed.Task;
+
+            if (picker.Result is not { Width: > 0, Height: > 0 } region)
+                return;
+
+            await _regionOcr.RecognizeAsync(item, CropToPng(bitmap, region));
+        }
+    }
+
+    /// <summary>Cuts the chosen rectangle out of the source image and encodes it as PNG.</summary>
+    private static byte[] CropToPng(Bitmap source, PixelRect region)
+    {
+        var target = new RenderTargetBitmap(new PixelSize(region.Width, region.Height), new Vector(96, 96));
+        using (var ctx = target.CreateDrawingContext())
+        {
+            ctx.DrawImage(
+                source,
+                new Rect(region.X, region.Y, region.Width, region.Height),
+                new Rect(0, 0, region.Width, region.Height));
+        }
+
+        using var ms = new MemoryStream();
+        target.Save(ms);
+        target.Dispose();
+        return ms.ToArray();
     }
 
     private void Rename_Click(object? sender, RoutedEventArgs e)
@@ -369,15 +458,24 @@ public partial class MainWindow : Window
     private void Queue_Click(object? sender, RoutedEventArgs e)
     {
         if (sender is Control { Tag: ClipItem item })
-            _viewModel.AddToQueueCommand.Execute(item);
+            _viewModel.ToggleQueueCommand.Execute(item);
         e.Handled = true;
     }
 
     private void TitleEditor_KeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key is Key.Enter or Key.Escape && sender is TextBox { DataContext: ClipItem item })
+        if (sender is not TextBox { DataContext: ClipItem item })
+            return;
+
+        if (e.Key == Key.Enter)
         {
             item.IsEditing = false;
+            SearchBox.Focus();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            item.CancelEdit();
             SearchBox.Focus();
             e.Handled = true;
         }

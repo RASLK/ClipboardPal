@@ -6,13 +6,37 @@ namespace ClipboardPal;
 
 public sealed class ImagePathToBitmapConverter : IValueConverter
 {
+    // Cards are 168 logical px wide; decode to 2x for HiDPI instead of loading full-size bitmaps.
+    private const int ThumbWidth = 336;
+    private const int CacheLimit = 128;
+
+    private static readonly object Gate = new();
+    private static readonly Dictionary<string, (DateTime WriteTime, Bitmap Bitmap)> Cache = new();
+
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is not string path || !File.Exists(path))
             return null;
         try
         {
-            return new Bitmap(path);
+            var writeTime = File.GetLastWriteTimeUtc(path);
+            lock (Gate)
+            {
+                if (Cache.TryGetValue(path, out var hit) && hit.WriteTime == writeTime)
+                    return hit.Bitmap;
+            }
+
+            using var stream = File.OpenRead(path);
+            var bitmap = Bitmap.DecodeToWidth(stream, ThumbWidth);
+
+            lock (Gate)
+            {
+                // Evicted bitmaps are left to GC: visible Image controls may still reference them.
+                if (Cache.Count >= CacheLimit)
+                    Cache.Clear();
+                Cache[path] = (writeTime, bitmap);
+            }
+            return bitmap;
         }
         catch
         {
@@ -26,27 +50,23 @@ public sealed class ImagePathToBitmapConverter : IValueConverter
 
 public sealed class RelativeTimeConverter : IValueConverter
 {
+    /// <summary>Set at startup so relative times follow the UI language.</summary>
+    public static Func<string, string>? Localize { get; set; }
+
+    private static string L(string key, string fallback) => Localize?.Invoke(key) ?? fallback;
+
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is not DateTime dt)
             return string.Empty;
 
         var delta = DateTime.Now - dt;
-        if (delta.TotalMinutes < 1) return "только что";
-        if (delta.TotalHours < 1) return $"{(int)delta.TotalMinutes} мин назад";
+        if (delta.TotalMinutes < 1) return L("time.now", "just now");
+        if (delta.TotalHours < 1) return string.Format(L("time.min", "{0} min ago"), (int)delta.TotalMinutes);
         if (dt.Date == DateTime.Today) return dt.ToString("HH:mm");
-        if (dt.Date == DateTime.Today.AddDays(-1)) return $"вчера {dt:HH:mm}";
+        if (dt.Date == DateTime.Today.AddDays(-1)) return string.Format(L("time.yesterday", "yesterday {0}"), dt.ToString("HH:mm"));
         return dt.ToString("dd.MM HH:mm");
     }
-
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
-}
-
-public sealed class BoolToOpacityConverter : IValueConverter
-{
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        value is true ? 1.0 : 0.0;
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
@@ -56,21 +76,6 @@ public sealed class SlotVisibleConverter : IValueConverter
 {
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         value is int n && n > 0;
-
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
-}
-
-public sealed class SelectedToBrushConverter : IValueConverter
-{
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        var selected = value is true;
-        // Accent vs card border — resolved at runtime from app resources if possible.
-        return selected
-            ? Avalonia.Media.Brush.Parse("#FF4C8DFF")
-            : Avalonia.Media.Brush.Parse("#1FFFFFFF");
-    }
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
@@ -97,7 +102,8 @@ public sealed class EnumIntConverter : IValueConverter
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        if (value is not int i)
+        // A negative index means "nothing selected", not enum value -1.
+        if (value is not int i || i < 0)
             return Avalonia.Data.BindingOperations.DoNothing;
 
         var type = ResolveEnumType(targetType, parameter);
