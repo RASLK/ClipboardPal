@@ -1,0 +1,63 @@
+# Reusable "publish" step: turns already-built artifacts (uploaded by
+# windows-pack.yml / macos-pack.yml / linux-pack.yml earlier in the same run)
+# into a GitHub Release.
+# Called by release.yml (manual tag) and release-branch.yml (auto-bumped tag).
+
+name: Release (publish)
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Version without leading v (e.g. 1.0.0)
+        required: true
+        type: string
+      tag:
+        description: Full tag (e.g. v1.0.0)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List assets
+        run: ls -lh artifacts
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: ClipboardPal ${{ inputs.tag }}
+          draft: false
+          prerelease: ${{ contains(inputs.tag, '-') }}
+          generate_release_notes: true
+          append_body: true
+          body: |
+            ## Downloads
+
+            | Platform | Installer | Portable |
+            | --- | --- | --- |
+            | Windows x64 | `ClipboardPal-*-win64.msi` | `*-win64.zip` |
+            | Windows x86 | `ClipboardPal-*-win32.msi` | `*-win32.zip` |
+            | macOS Apple Silicon | `ClipboardPal-*-macos-arm64.dmg` | — |
+            | macOS Intel | `ClipboardPal-*-macos-intel.dmg` | — |
+            | Linux x64 | `ClipboardPal-*-linux-x64.AppImage` | `*-linux-x64.zip` |
+
+            Each package has a matching **`.sha256sum`** — verify with:
+            `sha256sum -c ClipboardPal-….sha256sum`
+
+            **macOS:** builds are unsigned. If Gatekeeper blocks: right-click → **Open**.
+          files: artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

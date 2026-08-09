@@ -1,6 +1,9 @@
 # Orchestrates Flameshot-style packaging workflows and publishes a GitHub Release.
 # Trigger: git tag vX.Y.Z && git push origin vX.Y.Z
 #
+# For auto-incrementing patch versions without manual tagging, push to the
+# `release` branch instead — see release-branch.yml.
+#
 # Layout (same idea as flameshot-org/flameshot/.github/workflows):
 #   windows-pack.yml → MSI + ZIP + .sha256sum
 #   macos-pack.yml   → DMG + .sha256sum
@@ -70,43 +73,10 @@ jobs:
   release:
     name: Create GitHub Release
     needs: [version, windows, macos, linux]
-    runs-on: ubuntu-latest
     # Only publish a Release when a real tag was pushed (not bare manual pack).
     if: github.ref_type == 'tag'
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v5
-        with:
-          path: artifacts
-          merge-multiple: true
-
-      - name: List assets
-        run: ls -lh artifacts
-
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.version.outputs.tag }}
-          name: ClipboardPal ${{ needs.version.outputs.tag }}
-          draft: false
-          prerelease: ${{ contains(needs.version.outputs.tag, '-') }}
-          generate_release_notes: true
-          append_body: true
-          body: |
-            ## Downloads
-
-            | Platform | Installer | Portable |
-            | --- | --- | --- |
-            | Windows x64 | `ClipboardPal-*-win64.msi` | `*-win64.zip` |
-            | Windows x86 | `ClipboardPal-*-win32.msi` | `*-win32.zip` |
-            | macOS Apple Silicon | `ClipboardPal-*-macos-arm64.dmg` | — |
-            | macOS Intel | `ClipboardPal-*-macos-intel.dmg` | — |
-            | Linux x64 | `ClipboardPal-*-linux-x64.AppImage` | `*-linux-x64.zip` |
-
-            Each package has a matching **`.sha256sum`** — verify with:
-            `sha256sum -c ClipboardPal-….sha256sum`
-
-            **macOS:** builds are unsigned. If Gatekeeper blocks: right-click → **Open**.
-          files: artifacts/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    uses: ./.github/workflows/release-publish.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      tag: ${{ needs.version.outputs.tag }}
+    secrets: inherit
