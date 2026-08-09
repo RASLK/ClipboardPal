@@ -14,12 +14,9 @@ public sealed class PlatformOcrService : IOcrService
     private static readonly SemaphoreSlim Gate = new(1, 1);
 
     private readonly IOcrEngine[] _engines;
-    private readonly OnnxOcrEngine _builtIn;
 
     public PlatformOcrService(HistoryStore store)
     {
-        _builtIn = new OnnxOcrEngine(Path.Combine(store.RootDirectory, "ocr", "models"));
-
         // System engines first: they are faster, need no unpacking, and follow the user's
         // installed languages. The built-in model is the safety net that always works.
         var engines = new List<IOcrEngine>();
@@ -27,7 +24,7 @@ public sealed class PlatformOcrService : IOcrService
             engines.Add(new AppleVisionOcrEngine());
         if (OperatingSystem.IsWindows())
             engines.Add(new WindowsMediaOcrEngine());
-        engines.Add(_builtIn);
+        engines.Add(new OnnxOcrEngine(Path.Combine(store.RootDirectory, "ocr", "models")));
 
         _engines = engines.Where(e => e.IsSupported).ToArray();
     }
@@ -79,38 +76,4 @@ public sealed class PlatformOcrService : IOcrService
         }
     }
 
-    public async Task<OcrEngineInfo> DescribeAsync(CancellationToken cancellationToken = default)
-    {
-        await Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            var lines = new List<string>();
-            foreach (var engine in _engines)
-            {
-                if (engine == _builtIn)
-                {
-                    var error = await _builtIn.ProbeAsync(cancellationToken).ConfigureAwait(false);
-                    lines.Add(error is null
-                        ? $"{engine.Name}: ready"
-                        : $"{engine.Name}: unavailable ({error})");
-                }
-                else
-                {
-                    lines.Add($"{engine.Name}: provided by the system, tried first");
-                }
-            }
-
-            // The built-in engine is the one that decides whether OCR works at all.
-            var ready = await _builtIn.ProbeAsync(cancellationToken).ConfigureAwait(false) is null;
-            return new OcrEngineInfo(ready || _engines.Length > 1, string.Join(Environment.NewLine, lines));
-        }
-        catch (Exception ex)
-        {
-            return new OcrEngineInfo(false, OcrText.Describe(ex));
-        }
-        finally
-        {
-            Gate.Release();
-        }
-    }
 }

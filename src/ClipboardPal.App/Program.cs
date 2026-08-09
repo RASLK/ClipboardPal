@@ -44,6 +44,10 @@ internal static class Program
     public static AppBuilder BuildAvaloniaApp() =>
         AppBuilder.Configure<App>()
             .UsePlatformDetect()
+            // A tray utility has no business owning a Dock icon or a menu bar. Without this,
+            // macOS shows Avalonia's default application menu, whose English "Quit" sits next
+            // to ours and quits by a different route.
+            .With(new MacOSPlatformOptions { ShowInDock = false })
             .WithInterFont();
 
     private static void LogFatal(string source, Exception? ex)

@@ -21,6 +21,9 @@
     <string>__VERSION__</string>
     <key>LSMinimumSystemVersion</key>
     <string>11.0</string>
+    <!-- Agent app: lives in the menu bar only, with no Dock icon and no application menu. -->
+    <key>LSUIElement</key>
+    <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>

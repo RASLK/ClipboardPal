@@ -187,6 +187,7 @@ public sealed partial class MainViewModel : ObservableObject
         RefreshFilter();
         _ = DebounceSaveLoopAsync(_cts.Token);
         _ = RetentionLoopAsync(_cts.Token);
+        _ = OcrBacklogAsync(_cts.Token);
     }
 
     private void OnSettingsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -304,7 +305,9 @@ public sealed partial class MainViewModel : ObservableObject
                 return !SearchHasError;
             try
             {
-                return haystacks.Any(h => h is not null && _searchRegex.IsMatch(h));
+                // Empty strings are skipped, not matched: OcrText is "" on a picture checked
+                // and found to hold no text, and a pattern like ^$ must not surface all of them.
+                return haystacks.Any(h => !string.IsNullOrEmpty(h) && _searchRegex.IsMatch(h));
             }
             catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
             {
@@ -316,7 +319,7 @@ public sealed partial class MainViewModel : ObservableObject
             ? StringComparison.Ordinal
             : StringComparison.OrdinalIgnoreCase;
 
-        return haystacks.Any(h => h is not null &&
+        return haystacks.Any(h => !string.IsNullOrEmpty(h) &&
             _searchVariants.Any(v => h.Contains(v, comparison)));
     }
 
@@ -508,45 +511,66 @@ public sealed partial class MainViewModel : ObservableObject
                 }
             }
 
-            // OcrStatus is already set when the clip arrives from screen recognition — that pass
-            // has run, and repeating it would only overwrite the result with the same work.
-            if (item.Type == ClipItemType.Image &&
-                item.OcrStatus == OcrStatus.None &&
-                _settings.RecognizeTextOnImages &&
-                item.ImagePath is not null)
+            await RecognizeImageAsync(item, _cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Shutting down.
+        }
+        catch
+        {
+            // Enrichment is best-effort.
+        }
+    }
+
+    /// <summary>
+    /// Every captured picture is recognized right away — search and paste-as-text then work on
+    /// its contents without any setting to remember.
+    /// </summary>
+    private async Task RecognizeImageAsync(ClipItem item, CancellationToken cancellationToken)
+    {
+        // OcrStatus is already set when the clip arrives from region recognition — that pass
+        // has run, and repeating it would only overwrite the result with the same work.
+        if (item.Type != ClipItemType.Image || item.OcrStatus != OcrStatus.None || item.ImagePath is null)
+            return;
+
+        try
+        {
+            _dispatcher.Post(() => item.OcrStatus = OcrStatus.Running);
+
+            var result = await _ocr.RecognizeAsync(item.ImagePath, cancellationToken).ConfigureAwait(false);
+            var recognized = result.Outcome == OcrOutcome.Success ? result.Text : null;
+
+            _dispatcher.Post(() =>
             {
-                _dispatcher.Post(() => item.OcrStatus = OcrStatus.Running);
-
-                var result = await _ocr.RecognizeAsync(item.ImagePath, _cts.Token).ConfigureAwait(false);
-                var recognized = result.Outcome == OcrOutcome.Success ? result.Text : null;
-
-                _dispatcher.Post(() =>
+                if (!string.IsNullOrWhiteSpace(recognized))
                 {
-                    if (!string.IsNullOrWhiteSpace(recognized))
+                    item.OcrText = recognized;
+                    item.OcrError = null;
+                    item.OcrStatus = OcrStatus.Done;
+                    if (string.IsNullOrWhiteSpace(item.Title))
                     {
-                        item.OcrText = recognized;
-                        item.OcrError = null;
-                        item.OcrStatus = OcrStatus.Done;
-                        if (string.IsNullOrWhiteSpace(item.Title))
-                        {
-                            var line = recognized.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? recognized;
-                            item.Title = line.Length > 48 ? line[..48] + "…" : line;
-                        }
-                        ScheduleSave();
+                        var line = recognized.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? recognized;
+                        item.Title = line.Length > 48 ? line[..48] + "…" : line;
                     }
-                    else if (result.Outcome is OcrOutcome.Success or OcrOutcome.NoText)
-                    {
-                        item.OcrStatus = OcrStatus.NoText;
-                    }
-                    else
-                    {
-                        item.OcrStatus = OcrStatus.Failed;
-                        item.OcrError = result.Error;
-                    }
+                    ScheduleSave();
+                }
+                else if (result.Outcome is OcrOutcome.Success or OcrOutcome.NoText)
+                {
+                    item.OcrStatus = OcrStatus.NoText;
+                    // Empty string, not null: the difference marks "checked, nothing found" in the
+                    // saved history, so the startup backlog pass does not re-read it every launch.
+                    item.OcrText = string.Empty;
+                    ScheduleSave();
+                }
+                else
+                {
+                    item.OcrStatus = OcrStatus.Failed;
+                    item.OcrError = result.Error;
+                }
 
-                    RefreshFilter();
-                });
-            }
+                RefreshFilter();
+            });
         }
         catch (OperationCanceledException)
         {
@@ -554,7 +578,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            // Enrichment is best-effort, but a card must never stay stuck on "recognizing".
+            // A card must never stay stuck on "recognizing".
             _dispatcher.Post(() =>
             {
                 if (item.OcrStatus != OcrStatus.Running)
@@ -562,6 +586,28 @@ public sealed partial class MainViewModel : ObservableObject
                 item.OcrStatus = OcrStatus.Failed;
                 item.OcrError = ex.Message;
             });
+        }
+    }
+
+    /// <summary>
+    /// Recognizes images that predate always-on OCR (their OcrText is still null) so search
+    /// covers them too. One at a time: fresh captures share the same single-slot gate inside
+    /// the OCR service, so the backlog never starves them for long.
+    /// </summary>
+    private async Task OcrBacklogAsync(CancellationToken cancellationToken)
+    {
+        var backlog = Items
+            .Where(static i => i.Type == ClipItemType.Image &&
+                               i.OcrStatus == OcrStatus.None &&
+                               i.OcrText is null &&
+                               i.ImagePath is not null)
+            .ToList();
+
+        foreach (var item in backlog)
+        {
+            if (cancellationToken.IsCancellationRequested)
+                return;
+            await RecognizeImageAsync(item, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -644,6 +690,11 @@ public sealed partial class MainViewModel : ObservableObject
         Items.Insert(FirstUnpinnedIndex(), item);
         ScheduleSave();
         RefreshFilter();
+
+        // The startup backlog only walks live history, so a picture that predates always-on
+        // OCR and spent that time in the trash would never become searchable.
+        if (item.Type == ClipItemType.Image && item.OcrText is null && item.ImagePath is not null)
+            _ = RecognizeImageAsync(item, _cts.Token);
     }
 
     [RelayCommand]
@@ -844,10 +895,20 @@ public sealed partial class MainViewModel : ObservableObject
         await _store.SaveAsync(snapshot, cancellationToken).ConfigureAwait(false);
     }
 
+    private bool _disposed;
+
     public async ValueTask DisposeAsync()
     {
+        // Quitting can arrive here more than once (tray item, system shutdown, updater). The
+        // second pass used to throw on the disposed token source, which aborted the whole
+        // teardown before the app ever asked to shut down.
+        if (_disposed)
+            return;
+        _disposed = true;
+
         await _cts.CancelAsync().ConfigureAwait(false);
-        _cts.Dispose();
+        // Saved before the source is dropped — the save path takes no token of its own.
         await SaveNowAsync().ConfigureAwait(false);
+        _cts.Dispose();
     }
 }

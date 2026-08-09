@@ -91,13 +91,18 @@
               <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.HidePopupOnOutsideClick}" />
             </Grid>
 
-            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+            <Grid ColumnDefinitions="*,Auto,Auto" RowDefinitions="Auto,Auto">
               <TextBlock Classes="row-title" Text="{Binding Loc[row.updates]}" VerticalAlignment="Center" />
-              <Button Grid.Column="1" Content="{Binding Loc[btn.check]}" Command="{Binding CheckUpdatesCommand}"
+              <Button Grid.Column="1" Classes="accent" Content="{Binding Loc[btn.install]}"
+                      Command="{Binding InstallUpdateCommand}"
+                      IsVisible="{Binding UpdateAvailable}"
+                      Padding="12,6" Margin="0,0,8,0" />
+              <Button Grid.Column="2" Content="{Binding Loc[btn.check]}" Command="{Binding CheckUpdatesCommand}"
                       Padding="12,6" />
-              <TextBlock Grid.Row="1" Grid.ColumnSpan="2"
+              <TextBlock Grid.Row="1" Grid.ColumnSpan="3"
                          Text="{Binding UpdateStatus}" Foreground="{DynamicResource TextMutedBrush}"
-                         FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
+                         FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0"
+                         IsVisible="{Binding UpdateStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             </Grid>
 
             <StackPanel Spacing="4">
@@ -320,20 +325,6 @@
                 <TextBlock Classes="row-hint" Text="{Binding Loc[hint.skip.trash]}" />
               </StackPanel>
               <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.SkipTrash}" />
-            </Grid>
-            <Grid ColumnDefinitions="*,Auto,Auto" RowDefinitions="Auto,Auto">
-              <StackPanel Margin="0,0,8,0" VerticalAlignment="Center">
-                <TextBlock Classes="row-title" Text="{Binding Loc[row.ocr]}" />
-                <TextBlock Classes="row-hint" Text="{Binding Loc[hint.ocr]}" />
-              </StackPanel>
-              <Button Grid.Column="1" Content="{Binding Loc[btn.check]}"
-                      Command="{Binding CheckOcrCommand}"
-                      Padding="12,6" Margin="0,0,8,0" VerticalAlignment="Center" />
-              <ToggleSwitch Grid.Column="2" IsChecked="{Binding Settings.RecognizeTextOnImages}" />
-              <TextBlock Grid.Row="1" Grid.ColumnSpan="3"
-                         Text="{Binding OcrStatus}" Foreground="{DynamicResource TextMutedBrush}"
-                         FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0"
-                         IsVisible="{Binding OcrStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             </Grid>
             <Grid ColumnDefinitions="*,Auto">
               <TextBlock Classes="row-title" Text="{Binding Loc[row.duplicates]}" />

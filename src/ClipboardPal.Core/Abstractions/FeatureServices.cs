@@ -13,6 +13,35 @@ public interface ITrayFeedbackService
     void AnimateCopy();
 }
 
+/// <summary>Latest-release info from the distribution channel (GitHub Releases).</summary>
+public sealed record UpdateCheck(
+    Version Current,
+    Version Latest,
+    string TagName,
+    string ReleaseUrl,
+    string? AssetName,
+    string? AssetUrl)
+{
+    public bool UpdateAvailable => Latest > Current;
+
+    /// <summary>False when there is no package for how the app is currently run (e.g. dotnet run).</summary>
+    public bool CanAutoInstall => AssetUrl is not null;
+}
+
+public interface IUpdateService
+{
+    Task<UpdateCheck> CheckAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Downloads the release package and hands off to the platform installer; the app then quits
+    /// itself and comes back already updated. Progress is percent of the download.
+    /// </summary>
+    Task InstallAsync(UpdateCheck update, IProgress<int>? progress = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Fallback for builds without a package: show the releases page in the browser.</summary>
+    void OpenReleasePage(UpdateCheck update);
+}
+
 /// <summary>How a recognition attempt ended. "No text" and "engine missing" look the same to the
 /// user unless they are told apart, which is the whole point of reporting an outcome.</summary>
 public enum OcrOutcome
@@ -40,15 +69,9 @@ public sealed record OcrResult(OcrOutcome Outcome, string? Text, string? Engine,
         new(OcrOutcome.Failed, null, null, error);
 }
 
-/// <param name="Summary">Human-readable state of the engine, ready to show in settings.</param>
-public sealed record OcrEngineInfo(bool IsReady, string Summary);
-
 public interface IOcrService
 {
     Task<OcrResult> RecognizeAsync(string imagePath, CancellationToken cancellationToken = default);
-
-    /// <summary>Prepares the engine if needed and reports what it found, for the settings screen.</summary>
-    Task<OcrEngineInfo> DescribeAsync(CancellationToken cancellationToken = default);
 }
 
 public interface ILinkPreviewService

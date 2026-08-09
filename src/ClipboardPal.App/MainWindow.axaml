@@ -142,8 +142,7 @@
                               Classes.failed="{Binding IsOcrFailed}"
                               Content="OCR" Tag="{Binding}"
                               Click="Ocr_Click"
-                              IsVisible="{Binding IsImage}"
-                              ToolTip.Tip="{Binding OcrTooltip}" />
+                              IsVisible="{Binding IsImage}" />
                       <TextBlock Grid.Column="2" Text="📌" FontSize="11" Margin="4,0,0,0"
                                  IsVisible="{Binding IsPinned}" />
                     </Grid>

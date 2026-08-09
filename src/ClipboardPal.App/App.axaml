@@ -222,6 +222,10 @@
       <Setter Property="Background" Value="#FFD13438" />
       <Setter Property="Foreground" Value="White" />
     </Style>
+    <Style Selector="Button.accent">
+      <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" />
+    </Style>
     <Style Selector="TabControl > TabItem">
       <Setter Property="FontSize" Value="12.5" />
       <Setter Property="Padding" Value="10,8" />
@@ -235,12 +239,12 @@
                 Clicked="Tray_Clicked">
         <TrayIcon.Menu>
           <NativeMenu>
-            <NativeMenuItem Header="Open panel" Click="TrayOpen_Click" />
-            <NativeMenuItem Header="Settings" Click="TraySettings_Click" />
+            <NativeMenuItem Header="Open panel" local:App.MenuKey="tray.open" Click="TrayOpen_Click" />
+            <NativeMenuItem Header="Settings" local:App.MenuKey="tray.settings" Click="TraySettings_Click" />
             <NativeMenuItemSeparator />
-            <NativeMenuItem Header="Clear history" Click="TrayClear_Click" />
+            <NativeMenuItem Header="Clear history" local:App.MenuKey="tray.clear" Click="TrayClear_Click" />
             <NativeMenuItemSeparator />
-            <NativeMenuItem Header="Quit" Click="TrayExit_Click" />
+            <NativeMenuItem Header="Quit" local:App.MenuKey="tray.exit" Click="TrayExit_Click" />
           </NativeMenu>
         </TrayIcon.Menu>
       </TrayIcon>

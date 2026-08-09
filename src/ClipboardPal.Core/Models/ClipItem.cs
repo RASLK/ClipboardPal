@@ -36,7 +36,6 @@ public sealed partial class ClipItem : ObservableObject
     {
         OnPropertyChanged(nameof(DisplayTitle));
         OnPropertyChanged(nameof(CreatedAt));
-        OnPropertyChanged(nameof(OcrTooltip));
         OnPropertyChanged(nameof(QueueTooltip));
     }
 
@@ -57,7 +56,6 @@ public sealed partial class ClipItem : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasOcr))]
     [NotifyPropertyChangedFor(nameof(DisplayOcrStatus))]
-    [NotifyPropertyChangedFor(nameof(OcrTooltip))]
     private string? _ocrText;
 
     [ObservableProperty]
@@ -65,12 +63,10 @@ public sealed partial class ClipItem : ObservableObject
     [NotifyPropertyChangedFor(nameof(DisplayOcrStatus))]
     [NotifyPropertyChangedFor(nameof(IsOcrRunning))]
     [NotifyPropertyChangedFor(nameof(IsOcrFailed))]
-    [NotifyPropertyChangedFor(nameof(OcrTooltip))]
     private OcrStatus _ocrStatus;
 
     [ObservableProperty]
     [property: JsonIgnore]
-    [NotifyPropertyChangedFor(nameof(OcrTooltip))]
     private string? _ocrError;
 
     public string? LinkUrl { get; set; }
@@ -138,16 +134,6 @@ public sealed partial class ClipItem : ObservableObject
 
     [JsonIgnore]
     public bool IsOcrFailed => DisplayOcrStatus == OcrStatus.Failed;
-
-    [JsonIgnore]
-    public string? OcrTooltip => DisplayOcrStatus switch
-    {
-        OcrStatus.Running => L("ocr.tip.running", "Recognizing text…"),
-        OcrStatus.Done => OcrText,
-        OcrStatus.NoText => L("ocr.tip.notext", "No readable text on this image"),
-        OcrStatus.Failed => OcrError ?? L("ocr.tip.failed", "Text recognition failed"),
-        _ => L("ocr.tip.pick", "Select a part of the image to read its text")
-    };
 
     [JsonIgnore]
     public string QueueTooltip => IsQueued

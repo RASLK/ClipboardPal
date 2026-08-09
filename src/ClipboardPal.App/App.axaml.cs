@@ -26,6 +26,20 @@ public partial class App : Application
     private SettingsService? _settingsService;
     private TrayFeedbackService? _trayFeedback;
     private Mutex? _singleInstance;
+    private bool _shutdownStarted;
+
+    /// <summary>
+    /// Localization key carried by a tray menu item. Labels used to be assigned by position,
+    /// but <see cref="NativeMenuItemSeparator"/> derives from <see cref="NativeMenuItem"/>, so
+    /// separators counted as items and shifted every caption by one — the entry reading "Quit"
+    /// was really "Clear history". An explicit key cannot drift.
+    /// </summary>
+    public static readonly AttachedProperty<string?> MenuKeyProperty =
+        AvaloniaProperty.RegisterAttached<App, NativeMenuItem, string?>("MenuKey");
+
+    public static string? GetMenuKey(NativeMenuItem item) => item.GetValue(MenuKeyProperty);
+
+    public static void SetMenuKey(NativeMenuItem item, string? value) => item.SetValue(MenuKeyProperty, value);
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
@@ -118,14 +132,27 @@ public partial class App : Application
 
             desktop.MainWindow = _mainWindow;
             _mainWindow.AttachHotkeys(_hotkeys);
-            desktop.ShutdownRequested += async (_, _) => await ShutdownServicesAsync();
+            desktop.ShutdownRequested += (_, e) =>
+            {
+                // Cmd+Q, the system Quit item and OS logout land here without passing through
+                // the tray handler. The handler is not awaited by the lifetime, so an async
+                // teardown here would be cut short — intercept once, run the full quit path,
+                // and let the Shutdown() it issues pass through on the second visit.
+                if (_shutdownStarted)
+                    return;
+                e.Cancel = true;
+                Dispatcher.UIThread.Post(() => _ = QuitAsync(askConfirm: false));
+            };
         }
 
         base.OnFrameworkInitializationCompleted();
     }
 
-    private static void ConfigureServices(IServiceCollection services)
+    private void ConfigureServices(IServiceCollection services)
     {
+        services.AddSingleton<IUpdateService>(sp => new GitHubUpdateService(
+            sp.GetRequiredService<HistoryStore>(),
+            () => Dispatcher.UIThread.InvokeAsync(() => QuitAsync(askConfirm: false))));
         services.AddSingleton<IUiDispatcher>(_ => new AvaloniaUiDispatcher(Dispatcher.UIThread));
         services.AddSingleton<HistoryStore>();
         services.AddSingleton<SettingsService>();
@@ -193,12 +220,11 @@ public partial class App : Application
             if (TrayIcon.GetIcons(this) is not { Count: > 0 } icons) return;
             if (icons[0].Menu is not { } menu) return;
 
-            var labeled = menu.Items.OfType<NativeMenuItem>().ToList();
-            if (labeled.Count < 4) return;
-            labeled[0].Header = _l10n["tray.open"];
-            labeled[1].Header = _l10n["tray.settings"];
-            labeled[2].Header = _l10n["tray.clear"];
-            labeled[3].Header = _l10n["tray.exit"];
+            foreach (var item in menu.Items.OfType<NativeMenuItem>())
+            {
+                if (GetMenuKey(item) is { Length: > 0 } key)
+                    item.Header = _l10n[key];
+            }
         }
 
         if (Dispatcher.UIThread.CheckAccess())
@@ -219,6 +245,9 @@ public partial class App : Application
 
         _settingsWindow = new SettingsWindow(_services.GetRequiredService<SettingsViewModel>());
         _settingsWindow.Show();
+        // An agent app (no Dock icon) is not brought forward by the OS — ask explicitly, or the
+        // window opens behind whatever the user was working in.
+        _settingsWindow.Activate();
     }
 
     private void Tray_Clicked(object? sender, EventArgs e) =>
@@ -235,15 +264,47 @@ public partial class App : Application
         // tray item promises "Clear history" regardless of which tab was left open.
         Dispatcher.UIThread.Post(() => _viewModel?.ClearHistoryUnpinned());
 
-    private async void TrayExit_Click(object? sender, EventArgs e)
+    private async void TrayExit_Click(object? sender, EventArgs e) =>
+        await QuitAsync(askConfirm: true);
+
+    private async Task QuitAsync(bool askConfirm)
     {
-        if (_settingsService?.Settings.ConfirmBeforeQuit == true)
+        if (_shutdownStarted)
+            return;
+
+        if (askConfirm && _settingsService?.Settings.ConfirmBeforeQuit == true)
         {
-            var confirmed = await ConfirmQuitAsync();
-            if (!confirmed) return;
+            bool confirmed;
+            try
+            {
+                confirmed = await ConfirmQuitAsync();
+            }
+            catch (Exception ex)
+            {
+                // A confirmation that cannot be shown must never become a quit that cannot
+                // happen — that is exactly how the tray item ended up doing nothing.
+                LogQuitProblem("ConfirmQuit", ex);
+                confirmed = true;
+            }
+
+            if (!confirmed || _shutdownStarted)
+                return;
         }
 
+        _shutdownStarted = true;
+
+        // Armed BEFORE teardown: stopping the global hook can hang in native code (uiohook on
+        // macOS), and the hook runs on a foreground thread that would keep a dead-looking
+        // process alive. A quit must mean quit, so the hard stop cannot depend on the teardown
+        // finishing.
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            Environment.Exit(0);
+        });
+
         await ShutdownServicesAsync();
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             desktop.Shutdown();
     }
@@ -251,7 +312,6 @@ public partial class App : Application
     private Task<bool> ConfirmQuitAsync()
     {
         var tcs = new TaskCompletionSource<bool>();
-        var owner = _mainWindow;
         var l10n = _l10n;
 
         var yes = new Button { Content = l10n?["quit.yes"] ?? "Выйти", Padding = new Thickness(14, 6) };
@@ -270,6 +330,9 @@ public partial class App : Application
             Height = 150,
             WindowStartupLocation = WindowStartupLocation.CenterScreen,
             CanResize = false,
+            // The tray is the only thing on screen when this appears — it has to come to front.
+            Topmost = true,
+            ShowInTaskbar = true,
             Content = new StackPanel
             {
                 Margin = new Thickness(20),
@@ -290,27 +353,53 @@ public partial class App : Application
         no.Click += (_, _) => { tcs.TrySetResult(false); dialog.Close(); };
         dialog.Closed += (_, _) => tcs.TrySetResult(false);
 
-        if (owner is not null)
-            _ = dialog.ShowDialog(owner);
-        else
-            dialog.Show();
+        // Deliberately ownerless. The panel is the only candidate owner and it spends its life
+        // hidden off-screen; ShowDialog rejects a non-visible owner outright ("Cannot show
+        // window with non-visible owner"), and that exception — swallowed inside the async void
+        // tray handler — is why pressing Quit appeared to do nothing at all.
+        dialog.Show();
+        dialog.Activate();
 
         return tcs.Task;
     }
 
+    private static void LogQuitProblem(string source, Exception ex)
+    {
+        try
+        {
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "ClipboardPal");
+            Directory.CreateDirectory(dir);
+            File.AppendAllText(Path.Combine(dir, "crash.log"),
+                $"[{DateTime.Now:O}] {source}{Environment.NewLine}{ex}{Environment.NewLine}{Environment.NewLine}");
+        }
+        catch
+        {
+            // Logging must never be the reason a quit fails.
+        }
+    }
+
     private async Task ShutdownServicesAsync()
     {
-        if (_viewModel is not null)
-            await _viewModel.DisposeAsync();
-        if (_settingsService is not null)
-            await _settingsService.DisposeAsync();
-        if (_hotkeys is not null)
-            await _hotkeys.DisposeAsync();
-        if (_clipboard is not null)
-            await _clipboard.DisposeAsync();
-        if (_hotEdge is not null)
-            await _hotEdge.DisposeAsync();
-        _services?.Dispose();
-        _singleInstance?.Dispose();
+        // Every service gets its turn even when an earlier one fails: one bad dispose must not
+        // leave the hook thread alive or the history unsaved.
+        await TryAsync(() => _viewModel?.DisposeAsync() ?? ValueTask.CompletedTask);
+        await TryAsync(() => _settingsService?.DisposeAsync() ?? ValueTask.CompletedTask);
+        await TryAsync(() => _hotkeys?.DisposeAsync() ?? ValueTask.CompletedTask);
+        await TryAsync(() => _clipboard?.DisposeAsync() ?? ValueTask.CompletedTask);
+        await TryAsync(() => _hotEdge?.DisposeAsync() ?? ValueTask.CompletedTask);
+        // Async: the container holds IAsyncDisposable-only singletons, which a sync Dispose
+        // refuses to tear down.
+        await TryAsync(() => _services?.DisposeAsync() ?? ValueTask.CompletedTask);
+        try { _singleInstance?.Dispose(); } catch { /* quitting anyway */ }
+    }
+
+    private static async ValueTask TryAsync(Func<ValueTask> dispose)
+    {
+        // The per-service timeout keeps one hung native teardown from starving the rest;
+        // the history save runs first and is pure managed code, so it fits comfortably.
+        try { await dispose().AsTask().WaitAsync(TimeSpan.FromSeconds(1.5)); }
+        catch { /* quitting anyway */ }
     }
 }

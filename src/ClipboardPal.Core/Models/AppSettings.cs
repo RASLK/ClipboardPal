@@ -45,8 +45,6 @@ public sealed partial class AppSettings : ObservableObject
 
     // ----- Data -----
     [ObservableProperty] private bool _skipTrash = true;
-    [ObservableProperty] private bool _recognizeTextOnImages;
-
     [ObservableProperty] private bool _saveDuplicates;
     [ObservableProperty] private bool _captureImages = true;
     [ObservableProperty] private string _excludedApps = string.Empty;
@@ -120,7 +118,6 @@ public sealed partial class AppSettings : ObservableObject
         PreviewLength = 400;
 
         SkipTrash = true;
-        RecognizeTextOnImages = false;
         SaveDuplicates = false;
         CaptureImages = true;
         ExcludedApps = string.Empty;

@@ -14,7 +14,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly IAutostartService _autostart;
     private readonly IGlobalHotkeyService _hotkeys;
     private readonly ILocalizationService _l10n;
-    private readonly IOcrService _ocr;
+    private readonly IUpdateService _updates;
+
+    private UpdateCheck? _pendingUpdate;
 
     public AppSettings Settings => _settingsService.Settings;
     public LocView Loc { get; }
@@ -31,10 +33,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     private string _updateStatus = string.Empty;
 
     [ObservableProperty]
-    private bool _isCapturingHotkey;
+    private bool _updateAvailable;
 
     [ObservableProperty]
-    private string _ocrStatus = string.Empty;
+    private bool _isCapturingHotkey;
 
     public SettingsViewModel(
         SettingsService settingsService,
@@ -42,14 +44,14 @@ public sealed partial class SettingsViewModel : ObservableObject
         IAutostartService autostart,
         IGlobalHotkeyService hotkeys,
         ILocalizationService l10n,
-        IOcrService ocr)
+        IUpdateService updates)
     {
         _settingsService = settingsService;
         _main = main;
         _autostart = autostart;
         _hotkeys = hotkeys;
         _l10n = l10n;
-        _ocr = ocr;
+        _updates = updates;
         Loc = new LocView(l10n);
         HotkeyDisplay = Settings.Hotkey.ToString();
 
@@ -93,28 +95,53 @@ public sealed partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task CheckUpdatesAsync()
     {
-        UpdateStatus = "…";
-        await Task.Delay(600);
-        UpdateStatus = "OK";
-    }
-
-    /// <summary>
-    /// Answers "is OCR alive at all" without making the user copy a picture and guess. The first
-    /// call unpacks the bundled model, so it can take a moment; it never goes to the network.
-    /// </summary>
-    [RelayCommand]
-    private async Task CheckOcrAsync()
-    {
-        OcrStatus = _l10n["ocr.checking"];
+        UpdateAvailable = false;
+        _pendingUpdate = null;
+        UpdateStatus = _l10n["upd.checking"];
         try
         {
-            var info = await _ocr.DescribeAsync().ConfigureAwait(true);
-            var headline = info.IsReady ? _l10n["ocr.ready"] : _l10n["ocr.notready"];
-            OcrStatus = $"{headline}{Environment.NewLine}{info.Summary}";
+            var check = await _updates.CheckAsync().ConfigureAwait(true);
+            if (!check.UpdateAvailable)
+            {
+                UpdateStatus = string.Format(_l10n["upd.uptodate"], check.Current.ToString(3));
+                return;
+            }
+
+            _pendingUpdate = check;
+            UpdateStatus = string.Format(_l10n["upd.available"], check.Latest.ToString(3));
+            UpdateAvailable = true;
         }
         catch (Exception ex)
         {
-            OcrStatus = $"{_l10n["ocr.notready"]}{Environment.NewLine}{ex.Message}";
+            UpdateStatus = $"{_l10n["upd.error"]}{Environment.NewLine}{ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private async Task InstallUpdateAsync()
+    {
+        if (_pendingUpdate is not { } update)
+            return;
+
+        if (!update.CanAutoInstall)
+        {
+            // A dev/portable run has no matching release package — hand over to the browser.
+            UpdateStatus = _l10n["upd.manual"];
+            _updates.OpenReleasePage(update);
+            return;
+        }
+
+        UpdateAvailable = false;
+        try
+        {
+            var progress = new Progress<int>(p => UpdateStatus = string.Format(_l10n["upd.downloading"], p));
+            await _updates.InstallAsync(update, progress).ConfigureAwait(true);
+            UpdateStatus = _l10n["upd.restart"];
+        }
+        catch (Exception ex)
+        {
+            UpdateStatus = $"{_l10n["upd.error"]}{Environment.NewLine}{ex.Message}";
+            UpdateAvailable = true;
         }
     }
 
@@ -122,7 +149,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     private async Task ClearAllHistoryAsync()
     {
         await _main.ClearAllHistoryAsync();
-        UpdateStatus = "OK";
     }
 
     [RelayCommand]
