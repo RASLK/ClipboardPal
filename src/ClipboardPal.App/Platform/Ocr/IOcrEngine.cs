@@ -35,6 +35,17 @@ public interface IOcrEngine
     Task<OcrEngineResult> RecognizeAsync(string imagePath, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Stable error tokens that may travel from an engine up to the UI. When a token matches a
+/// localization key, the service layer can swap it for a user-facing sentence.
+/// </summary>
+public static class OcrErrorKeys
+{
+    public const string NoLanguagePack = "ocr.error.noLanguagePack";
+    public const string Failed = "ocr.error.failed";
+    public const string Unavailable = "ocr.error.unavailable";
+}
+
 internal static class OcrText
 {
     public static string FirstLine(string text)

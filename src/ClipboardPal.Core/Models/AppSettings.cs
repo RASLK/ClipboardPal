@@ -50,6 +50,12 @@ public sealed partial class AppSettings : ObservableObject
     [ObservableProperty] private string _excludedApps = string.Empty;
     [ObservableProperty] private int _maxHistoryItems = 300;
 
+    /// <summary>
+    /// When true, past clip cards from any app now listed in <see cref="ExcludedApps"/> are
+    /// hidden from the quick popup menu (history/queue/trash), not just newly copied ones.
+    /// </summary>
+    [ObservableProperty] private bool _hideExcludedAppHistory;
+
     // ----- Link -----
     [ObservableProperty] private bool _fetchLinkPreview;
 
@@ -63,6 +69,7 @@ public sealed partial class AppSettings : ObservableObject
     // ----- Hot edge -----
     [ObservableProperty] private bool _hotEdgeEnabled;
     [ObservableProperty] private double _hotEdgeDelaySeconds = 0.2;
+    [ObservableProperty] private HotEdgeCorner _hotEdgeCorner = HotEdgeCorner.BottomRight;
 
     // ----- Quick mode -----
     [ObservableProperty] private bool _quickModeEnabled;
@@ -121,6 +128,7 @@ public sealed partial class AppSettings : ObservableObject
         SaveDuplicates = false;
         CaptureImages = true;
         ExcludedApps = string.Empty;
+        HideExcludedAppHistory = false;
         MaxHistoryItems = 300;
 
         FetchLinkPreview = false;
@@ -130,6 +138,7 @@ public sealed partial class AppSettings : ObservableObject
 
         HotEdgeEnabled = false;
         HotEdgeDelaySeconds = 0.2;
+        HotEdgeCorner = HotEdgeCorner.BottomRight;
         QuickModeEnabled = false;
         QueueRemoveAfterPaste = true;
         AutoPlainText = false;
@@ -149,4 +158,17 @@ public sealed partial class AppSettings : ObservableObject
             .Where(static s => s.Length > 0)
             .Select(static s => s.ToLowerInvariant())
             .ToArray();
+
+    /// <summary>Whether a captured item's source process name is on the exclusion list.</summary>
+    public bool IsAppExcluded(string? sourceApp)
+    {
+        if (string.IsNullOrWhiteSpace(sourceApp))
+            return false;
+
+        var s = sourceApp.Trim();
+        if (s.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            s = s[..^4];
+
+        return ExcludedProcessNames().Contains(s.ToLowerInvariant());
+    }
 }

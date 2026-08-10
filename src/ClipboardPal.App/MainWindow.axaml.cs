@@ -119,11 +119,7 @@ public partial class MainWindow : Window
         }
 
         ApplyClipsOrientation(isSideDock);
-
-        // Keep search compact; shrink on side dock so it doesn't overflow.
-        SearchBorder.Width = isSideDock
-            ? Math.Clamp(sideWidth - 48, 180, 280)
-            : 440;
+        ApplyHeaderLayout(isSideDock);
 
         HintText.Text = "ClipboardPal";
         ToolTip.SetTip(HintText,
@@ -151,6 +147,7 @@ public partial class MainWindow : Window
     }
 
     private bool? _clipsVertical;
+    private bool? _headerSideDock;
 
     private void ApplyClipsOrientation(bool vertical)
     {
@@ -172,6 +169,107 @@ public partial class MainWindow : Window
             Spacing = 10,
             Margin = new Thickness(2, 6, 2, 2)
         });
+    }
+
+    /// <summary>
+    /// Top/Bottom keeps a single header row. Left/Right stacks brand/search, tabs, and
+    /// actions so the narrow side panel does not clip the fixed-width search + tabs row.
+    /// </summary>
+    private void ApplyHeaderLayout(bool sideDock)
+    {
+        if (_headerSideDock == sideDock)
+        {
+            // Still refresh search sizing when only panel width changed.
+            ApplySearchSizing(sideDock);
+            return;
+        }
+
+        _headerSideDock = sideDock;
+        HeaderGrid.ColumnDefinitions.Clear();
+        HeaderGrid.RowDefinitions.Clear();
+
+        if (sideDock)
+        {
+            HeaderGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
+            HeaderGrid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            HeaderGrid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            HeaderGrid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+
+            Grid.SetRow(HeaderBrandSearch, 0);
+            Grid.SetColumn(HeaderBrandSearch, 0);
+            Grid.SetColumnSpan(HeaderBrandSearch, 1);
+
+            Grid.SetRow(SpaceSwitcher, 1);
+            Grid.SetColumn(SpaceSwitcher, 0);
+            Grid.SetColumnSpan(SpaceSwitcher, 1);
+
+            Grid.SetRow(HeaderActions, 2);
+            Grid.SetColumn(HeaderActions, 0);
+            Grid.SetColumnSpan(HeaderActions, 1);
+
+            HeaderBrandSearch.Orientation = Orientation.Vertical;
+            HeaderBrandSearch.Spacing = 10;
+            HeaderBrandSearch.HorizontalAlignment = HorizontalAlignment.Stretch;
+            HeaderBrandSearch.Margin = new Thickness(0, 0, 0, 8);
+
+            SpaceSwitcher.HorizontalAlignment = HorizontalAlignment.Stretch;
+            SpaceSwitcher.Margin = new Thickness(0, 0, 0, 8);
+            SpaceSwitcher.Classes.Add("side-compact");
+
+            HeaderActions.HorizontalAlignment = HorizontalAlignment.Right;
+            HeaderActions.Margin = new Thickness(0);
+        }
+        else
+        {
+            HeaderGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+            HeaderGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
+            HeaderGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+
+            Grid.SetRow(HeaderBrandSearch, 0);
+            Grid.SetColumn(HeaderBrandSearch, 0);
+            Grid.SetColumnSpan(HeaderBrandSearch, 1);
+
+            Grid.SetRow(SpaceSwitcher, 0);
+            Grid.SetColumn(SpaceSwitcher, 1);
+            Grid.SetColumnSpan(SpaceSwitcher, 1);
+
+            Grid.SetRow(HeaderActions, 0);
+            Grid.SetColumn(HeaderActions, 2);
+            Grid.SetColumnSpan(HeaderActions, 1);
+
+            HeaderBrandSearch.Orientation = Orientation.Horizontal;
+            HeaderBrandSearch.Spacing = 16;
+            HeaderBrandSearch.HorizontalAlignment = HorizontalAlignment.Left;
+            HeaderBrandSearch.Margin = new Thickness(0);
+
+            SpaceSwitcher.HorizontalAlignment = HorizontalAlignment.Center;
+            SpaceSwitcher.Margin = new Thickness(12, 0);
+            SpaceSwitcher.Classes.Remove("side-compact");
+
+            HeaderActions.HorizontalAlignment = HorizontalAlignment.Right;
+            HeaderActions.Margin = new Thickness(0);
+        }
+
+        ApplySearchSizing(sideDock);
+    }
+
+    private void ApplySearchSizing(bool sideDock)
+    {
+        if (sideDock)
+        {
+            // Stretch within the stacked header instead of a fixed 440px that overflows.
+            SearchBorder.Width = double.NaN;
+            SearchBorder.MinWidth = 0;
+            SearchBorder.MaxWidth = double.PositiveInfinity;
+            SearchBorder.HorizontalAlignment = HorizontalAlignment.Stretch;
+        }
+        else
+        {
+            SearchBorder.Width = 440;
+            SearchBorder.MinWidth = 0;
+            SearchBorder.MaxWidth = double.PositiveInfinity;
+            SearchBorder.HorizontalAlignment = HorizontalAlignment.Left;
+        }
     }
 
     public void HidePanel()

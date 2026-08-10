@@ -14,9 +14,12 @@ public sealed class PlatformOcrService : IOcrService
     private static readonly SemaphoreSlim Gate = new(1, 1);
 
     private readonly IOcrEngine[] _engines;
+    private readonly ILocalizationService _l10n;
 
-    public PlatformOcrService(HistoryStore store)
+    public PlatformOcrService(HistoryStore store, ILocalizationService l10n)
     {
+        _l10n = l10n;
+
         // System engines first: they are faster, need no unpacking, and follow the user's
         // installed languages. The built-in model is the safety net that always works.
         var engines = new List<IOcrEngine>();
@@ -52,14 +55,22 @@ public sealed class PlatformOcrService : IOcrService
                     case OcrEngineOutcome.Success:
                         return OcrResult.NoText(engine.Name);
 
-                    default:
-                        problems.Add($"{engine.Name} — {result.Error}");
+                    case OcrEngineOutcome.Unavailable:
+                    case OcrEngineOutcome.Failed:
+                        problems.Add($"{engine.Name} — {Localize(result.Error)}");
                         break;
+
+                    default:
+                    {
+                        // Exhaustive for future enum members.
+                        problems.Add($"{engine.Name} — {Localize(result.Error)}");
+                        break;
+                    }
                 }
             }
 
             return problems.Count == 0
-                ? OcrResult.Unavailable("no OCR engine available on this platform")
+                ? OcrResult.Unavailable(Localize(OcrErrorKeys.Unavailable))
                 : OcrResult.Failed(string.Join("; ", problems));
         }
         catch (OperationCanceledException)
@@ -76,4 +87,12 @@ public sealed class PlatformOcrService : IOcrService
         }
     }
 
+    private string Localize(string? tokenOrMessage)
+    {
+        if (string.IsNullOrWhiteSpace(tokenOrMessage))
+            return _l10n[OcrErrorKeys.Failed];
+
+        var localized = _l10n[tokenOrMessage];
+        return localized == tokenOrMessage ? tokenOrMessage : localized;
+    }
 }

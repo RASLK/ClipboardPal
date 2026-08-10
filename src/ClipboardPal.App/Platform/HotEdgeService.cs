@@ -39,8 +39,8 @@ public sealed class HotEdgeService : IHotEdgeService
             if (!TryGetCursor(out var x, out var y))
                 continue;
 
-            var onEdge = IsOnConfiguredEdge(x, y, _settings.PanelDock);
-            if (!onEdge)
+            var onCorner = IsOnConfiguredCorner(x, y, _settings.HotEdgeCorner);
+            if (!onCorner)
             {
                 _edgeSince = null;
                 continue;
@@ -50,7 +50,7 @@ public sealed class HotEdgeService : IHotEdgeService
             var delay = TimeSpan.FromSeconds(Math.Clamp(_settings.HotEdgeDelaySeconds, 0.05, 5));
             if (DateTime.UtcNow - _edgeSince >= delay)
             {
-                _edgeSince = DateTime.UtcNow.AddYears(1); // prevent retrigger until leave edge
+                _edgeSince = DateTime.UtcNow.AddYears(1); // prevent retrigger until leave corner
                 _dispatcher.Post(() => EdgeTriggered?.Invoke());
             }
         }
@@ -72,22 +72,23 @@ public sealed class HotEdgeService : IHotEdgeService
         return false;
     }
 
-    private static bool IsOnConfiguredEdge(int x, int y, PanelDock dock)
+    private static bool IsOnConfiguredCorner(int x, int y, HotEdgeCorner corner)
     {
-        const int thickness = 3;
+        // Small square hit-zone at the chosen screen corner (virtual desktop bounds).
+        const int zone = 10;
         if (!TryGetVirtualScreen(out var left, out var top, out var width, out var height))
             return false;
 
         var right = left + width - 1;
         var bottom = top + height - 1;
 
-        return dock switch
+        return corner switch
         {
-            PanelDock.Left => x <= left + thickness,
-            PanelDock.Right => x >= right - thickness,
-            PanelDock.Top => y <= top + thickness,
-            PanelDock.Bottom => y >= bottom - thickness,
-            _ => y >= bottom - thickness
+            HotEdgeCorner.TopLeft => x <= left + zone && y <= top + zone,
+            HotEdgeCorner.TopRight => x >= right - zone && y <= top + zone,
+            HotEdgeCorner.BottomLeft => x <= left + zone && y >= bottom - zone,
+            HotEdgeCorner.BottomRight => x >= right - zone && y >= bottom - zone,
+            _ => x >= right - zone && y >= bottom - zone
         };
     }
 

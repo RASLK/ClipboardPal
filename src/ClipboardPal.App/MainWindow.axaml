@@ -24,9 +24,10 @@
           Padding="18,14,18,10">
     <Grid RowDefinitions="Auto,*">
 
-      <!-- Одна линия: бренд + поиск слева, действия справа -->
-      <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,12" MinHeight="44">
-        <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+      <!-- Top/Bottom: one row. Left/Right: stacked by ApplyHeaderLayout. -->
+      <Grid x:Name="HeaderGrid" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,12" MinHeight="44">
+        <StackPanel x:Name="HeaderBrandSearch" Orientation="Horizontal" Spacing="16"
+                    VerticalAlignment="Center">
           <TextBlock Text="ClipboardPal" FontSize="16" FontWeight="SemiBold"
                      Foreground="{DynamicResource TextBrush}"
                      VerticalAlignment="Center"
@@ -38,6 +39,7 @@
                   BorderThickness="1" CornerRadius="10" Padding="12,0,8,0"
                   Width="440" Height="40"
                   VerticalAlignment="Center"
+                  HorizontalAlignment="Left"
                   x:Name="SearchBorder">
             <Grid ColumnDefinitions="Auto,*,Auto">
               <TextBlock Text="⌕" FontSize="19" VerticalAlignment="Center" Margin="0,0,10,0"
@@ -59,34 +61,39 @@
         </StackPanel>
 
         <!-- Space switcher: the panel shows one of three clip spaces at a time -->
-        <Border Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+        <Border x:Name="SpaceSwitcher" Grid.Column="1"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
                 Background="{DynamicResource FieldBrush}"
                 BorderBrush="{DynamicResource FieldBorderBrush}" BorderThickness="1"
                 CornerRadius="10" Padding="3" Margin="12,0">
-          <StackPanel Orientation="Horizontal" Spacing="2">
+          <StackPanel x:Name="SpaceSwitcherTabs" Orientation="Horizontal" Spacing="2"
+                      HorizontalAlignment="Center" VerticalAlignment="Center">
+            <!-- All three tabs use TextBlock content so baselines match (Queue also has a pill). -->
             <Button Classes="seg" Classes.active="{Binding IsHistorySpace}"
-                    Content="{Binding Loc[tab.history]}"
                     Command="{Binding SetSpaceCommand}"
-                    CommandParameter="{x:Static m:PanelSpace.History}" />
+                    CommandParameter="{x:Static m:PanelSpace.History}">
+              <TextBlock Text="{Binding Loc[tab.history]}" VerticalAlignment="Center" />
+            </Button>
             <Button Classes="seg" Classes.active="{Binding IsQueueSpace}"
                     Command="{Binding SetSpaceCommand}"
                     CommandParameter="{x:Static m:PanelSpace.Queue}"
                     ToolTip.Tip="{Binding Loc[tip.queue.tab]}">
-              <StackPanel Orientation="Horizontal" Spacing="6">
+              <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                 <TextBlock Text="{Binding Loc[tab.queue]}" VerticalAlignment="Center" />
                 <Border Classes="count-pill" IsVisible="{Binding HasQueueItems}">
-                  <TextBlock Text="{Binding QueueCount}" />
+                  <TextBlock Text="{Binding QueueCount}" VerticalAlignment="Center" />
                 </Border>
               </StackPanel>
             </Button>
             <Button Classes="seg" Classes.active="{Binding IsTrashSpace}"
-                    Content="{Binding Loc[tab.trash]}"
                     Command="{Binding SetSpaceCommand}"
-                    CommandParameter="{x:Static m:PanelSpace.Trash}" />
+                    CommandParameter="{x:Static m:PanelSpace.Trash}">
+              <TextBlock Text="{Binding Loc[tab.trash]}" VerticalAlignment="Center" />
+            </Button>
           </StackPanel>
         </Border>
 
-        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8"
+        <StackPanel x:Name="HeaderActions" Grid.Column="2" Orientation="Horizontal" Spacing="8"
                     VerticalAlignment="Center" HorizontalAlignment="Right">
           <Border Background="{DynamicResource FieldBrush}" CornerRadius="9"
                   Padding="10,0" Height="36" VerticalAlignment="Center"
@@ -98,9 +105,14 @@
           <Button Content="{Binding Loc[btn.clear]}" Command="{Binding ClearUnpinnedCommand}"
                   Padding="14,8" MinHeight="36" VerticalAlignment="Center"
                   ToolTip.Tip="{Binding ClearTooltip}" />
-          <Button Content="⚙" Click="Settings_Click"
-                  FontSize="17" Padding="12,4" MinHeight="36" MinWidth="40" VerticalAlignment="Center"
-                  ToolTip.Tip="{Binding Loc[tip.settings]}" />
+          <!-- PathIcon avoids emoji ascent metrics that push ⚙ above the row baseline. -->
+          <Button Classes="icon-btn" Click="Settings_Click"
+                  Padding="10,8" MinHeight="36" MinWidth="40" VerticalAlignment="Center"
+                  ToolTip.Tip="{Binding Loc[tip.settings]}">
+            <PathIcon Width="16" Height="16"
+                      Foreground="{DynamicResource TextBrush}"
+                      Data="M12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.68 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z" />
+          </Button>
         </StackPanel>
       </Grid>
 

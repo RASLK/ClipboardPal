@@ -13,6 +13,9 @@ public static class LayoutText
 
     private static Dictionary<char, char> BuildMap(string from, string to)
     {
+        if (from.Length != to.Length)
+            throw new InvalidOperationException("QWERTY/ЙЦУКЕН layout tables must be the same length.");
+
         var map = new Dictionary<char, char>(from.Length);
         for (var i = 0; i < from.Length; i++)
             map[from[i]] = to[i];
@@ -21,8 +24,11 @@ public static class LayoutText
 
     public static IReadOnlyList<string> SearchVariants(string query)
     {
+        // Keep the typed casing for the literal variant so case-sensitive search still
+        // matches «Адм» against «Адм». Layout maps are lowercase-only, so fold via
+        // ToLowerInvariant (Cyrillic-safe; not culture-dependent like Turkish i).
+        var variants = new List<string>(3) { query };
         var q = query.ToLowerInvariant();
-        var variants = new List<string>(3) { q };
 
         var asRu = Convert(q, EnToRu);
         if (asRu != q)

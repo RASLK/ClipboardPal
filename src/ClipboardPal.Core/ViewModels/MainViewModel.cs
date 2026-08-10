@@ -223,6 +223,10 @@ public sealed partial class MainViewModel : ObservableObject
             case nameof(AppSettings.HistoryRetention):
                 ApplyRetention();
                 break;
+            case nameof(AppSettings.ExcludedApps):
+            case nameof(AppSettings.HideExcludedAppHistory):
+                RefreshFilter();
+                break;
         }
     }
 
@@ -274,8 +278,19 @@ public sealed partial class MainViewModel : ObservableObject
 
         try
         {
+            // Keep the user's pattern as-is (metacharacters still work), and OR each
+            // cross-layout literal so «адм» still finds «flv» when the .* toggle is on.
+            // Without this, enabling regex silently disables layout-independent search.
+            var pattern = SearchText;
+            foreach (var variant in _searchVariants)
+            {
+                if (string.Equals(variant, SearchText, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                pattern += "|" + System.Text.RegularExpressions.Regex.Escape(variant);
+            }
+
             _searchRegex = new System.Text.RegularExpressions.Regex(
-                SearchText, opts, TimeSpan.FromMilliseconds(200));
+                pattern, opts, TimeSpan.FromMilliseconds(200));
         }
         catch (ArgumentException)
         {
@@ -315,12 +330,28 @@ public sealed partial class MainViewModel : ObservableObject
             }
         }
 
-        var comparison = _settings.SearchCaseSensitive
+        var literalComparison = _settings.SearchCaseSensitive
             ? StringComparison.Ordinal
             : StringComparison.OrdinalIgnoreCase;
 
-        return haystacks.Any(h => !string.IsNullOrEmpty(h) &&
-            _searchVariants.Any(v => h.Contains(v, comparison)));
+        return haystacks.Any(h =>
+        {
+            if (string.IsNullOrEmpty(h))
+                return false;
+
+            foreach (var variant in _searchVariants)
+            {
+                // Cross-layout folds are stored lowercased; always ignore case for those
+                // so «адм» still hits «FLV» when case-sensitive mode is on.
+                var cmp = string.Equals(variant, SearchText, StringComparison.Ordinal)
+                    ? literalComparison
+                    : StringComparison.OrdinalIgnoreCase;
+                if (h.Contains(variant, cmp))
+                    return true;
+            }
+
+            return false;
+        });
     }
 
     public void RefreshFilter()
@@ -331,6 +362,8 @@ public sealed partial class MainViewModel : ObservableObject
             PanelSpace.Queue => _queue.Items.Where(static i => !i.IsInTrash),
             _ => Items.Where(static i => !i.IsInTrash)
         };
+        if (_settings.HideExcludedAppHistory)
+            source = source.Where(i => !_settings.IsAppExcluded(i.SourceApp));
         var matched = source.Where(Matches).Take(_settings.PopupItemLimit).ToList();
         SyncFiltered(matched);
 

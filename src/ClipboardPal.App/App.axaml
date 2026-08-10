@@ -120,14 +120,32 @@
       <Setter Property="MinHeight" Value="28" />
       <Setter Property="FontSize" Value="12.5" />
       <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
       <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
     </Style>
     <Style Selector="Button.seg /template/ ContentPresenter">
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
       <Setter Property="Transitions">
         <Transitions>
           <BrushTransition Property="Background" Duration="0:0:0.12" />
         </Transitions>
       </Setter>
+    </Style>
+    <!-- Narrow side dock: tighter tab padding so History/Queue/Trash fit. -->
+    <Style Selector="Border.side-compact Button.seg">
+      <Setter Property="Padding" Value="10,5" />
+    </Style>
+
+    <!-- Settings gear: keep vector glyph vertically centered with sibling controls -->
+    <Style Selector="Button.icon-btn">
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.icon-btn /template/ ContentPresenter">
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
     </Style>
     <Style Selector="Button.seg:pointerover /template/ ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
@@ -156,6 +174,7 @@
       <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" />
       <Setter Property="FontSize" Value="10.5" />
       <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
     <!-- Card queue toggle: lights up while the clip is staged in the queue -->

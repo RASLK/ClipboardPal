@@ -17,6 +17,15 @@ public enum PanelDock
     Right
 }
 
+/// <summary>Screen corner that activates hot-edge panel show.</summary>
+public enum HotEdgeCorner
+{
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight
+}
+
 public enum ClipAction
 {
     Copy,

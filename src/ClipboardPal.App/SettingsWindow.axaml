@@ -66,18 +66,62 @@
             <StackPanel Spacing="6">
               <TextBlock Classes="row-title" Text="{Binding Loc[row.dock]}" />
               <WrapPanel>
-                <RadioButton GroupName="Dock" Margin="0,0,16,4" MinWidth="120"
-                             Content="{Binding Loc[dock.left], StringFormat='← {0}'}"
-                             IsChecked="{Binding Settings.PanelDock, Converter={StaticResource EnumMatch}, ConverterParameter=Left}" />
-                <RadioButton GroupName="Dock" Margin="0,0,16,4" MinWidth="120"
-                             Content="{Binding Loc[dock.right], StringFormat='→ {0}'}"
-                             IsChecked="{Binding Settings.PanelDock, Converter={StaticResource EnumMatch}, ConverterParameter=Right}" />
-                <RadioButton GroupName="Dock" Margin="0,0,16,4" MinWidth="120"
-                             Content="{Binding Loc[dock.top], StringFormat='↑ {0}'}"
-                             IsChecked="{Binding Settings.PanelDock, Converter={StaticResource EnumMatch}, ConverterParameter=Top}" />
-                <RadioButton GroupName="Dock" Margin="0,0,16,4" MinWidth="120"
-                             Content="{Binding Loc[dock.bottom], StringFormat='↓ {0}'}"
-                             IsChecked="{Binding Settings.PanelDock, Converter={StaticResource EnumMatch}, ConverterParameter=Bottom}" />
+                <RadioButton GroupName="Dock" Margin="0,0,12,4" Padding="8,6"
+                             ToolTip.Tip="{Binding Loc[dock.left]}"
+                             IsChecked="{Binding Settings.PanelDock, Converter={StaticResource EnumMatch}, ConverterParameter=Left}">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Viewbox Width="18" Height="18">
+                      <Canvas Width="16" Height="16">
+                        <Path Stroke="{DynamicResource TextBrush}" StrokeThickness="1.4" Fill="Transparent"
+                              Data="M2,2 H14 V14 H2 Z" />
+                        <Path Fill="{DynamicResource AccentBrush}" Data="M2,2 H5.2 V14 H2 Z" />
+                      </Canvas>
+                    </Viewbox>
+                    <TextBlock Text="{Binding Loc[dock.left]}" VerticalAlignment="Center" />
+                  </StackPanel>
+                </RadioButton>
+                <RadioButton GroupName="Dock" Margin="0,0,12,4" Padding="8,6"
+                             ToolTip.Tip="{Binding Loc[dock.right]}"
+                             IsChecked="{Binding Settings.PanelDock, Converter={StaticResource EnumMatch}, ConverterParameter=Right}">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Viewbox Width="18" Height="18">
+                      <Canvas Width="16" Height="16">
+                        <Path Stroke="{DynamicResource TextBrush}" StrokeThickness="1.4" Fill="Transparent"
+                              Data="M2,2 H14 V14 H2 Z" />
+                        <Path Fill="{DynamicResource AccentBrush}" Data="M10.8,2 H14 V14 H10.8 Z" />
+                      </Canvas>
+                    </Viewbox>
+                    <TextBlock Text="{Binding Loc[dock.right]}" VerticalAlignment="Center" />
+                  </StackPanel>
+                </RadioButton>
+                <RadioButton GroupName="Dock" Margin="0,0,12,4" Padding="8,6"
+                             ToolTip.Tip="{Binding Loc[dock.top]}"
+                             IsChecked="{Binding Settings.PanelDock, Converter={StaticResource EnumMatch}, ConverterParameter=Top}">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Viewbox Width="18" Height="18">
+                      <Canvas Width="16" Height="16">
+                        <Path Stroke="{DynamicResource TextBrush}" StrokeThickness="1.4" Fill="Transparent"
+                              Data="M2,2 H14 V14 H2 Z" />
+                        <Path Fill="{DynamicResource AccentBrush}" Data="M2,2 H14 V5.2 H2 Z" />
+                      </Canvas>
+                    </Viewbox>
+                    <TextBlock Text="{Binding Loc[dock.top]}" VerticalAlignment="Center" />
+                  </StackPanel>
+                </RadioButton>
+                <RadioButton GroupName="Dock" Margin="0,0,12,4" Padding="8,6"
+                             ToolTip.Tip="{Binding Loc[dock.bottom]}"
+                             IsChecked="{Binding Settings.PanelDock, Converter={StaticResource EnumMatch}, ConverterParameter=Bottom}">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Viewbox Width="18" Height="18">
+                      <Canvas Width="16" Height="16">
+                        <Path Stroke="{DynamicResource TextBrush}" StrokeThickness="1.4" Fill="Transparent"
+                              Data="M2,2 H14 V14 H2 Z" />
+                        <Path Fill="{DynamicResource AccentBrush}" Data="M2,10.8 H14 V14 H2 Z" />
+                      </Canvas>
+                    </Viewbox>
+                    <TextBlock Text="{Binding Loc[dock.bottom]}" VerticalAlignment="Center" />
+                  </StackPanel>
+                </RadioButton>
               </WrapPanel>
             </StackPanel>
 
@@ -107,7 +151,9 @@
 
             <StackPanel Spacing="4">
               <TextBlock Classes="row-title" Text="{Binding Loc[row.hotkey]}" />
-              <TextBox Text="{Binding HotkeyDisplay}" IsReadOnly="True"
+              <TextBox x:Name="HotkeyBox"
+                       Text="{Binding HotkeyDisplay}" IsReadOnly="True"
+                       Focusable="True"
                        MinWidth="180" MaxWidth="320" HorizontalAlignment="Stretch"
                        GotFocus="HotkeyBox_GotFocus" LostFocus="HotkeyBox_LostFocus" />
               <TextBlock Classes="row-hint" Text="{Binding Loc[hint.hotkey]}" />
@@ -262,7 +308,58 @@
               </StackPanel>
               <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.HotEdgeEnabled}" />
             </Grid>
-            <StackPanel Spacing="4" IsEnabled="{Binding Settings.HotEdgeEnabled}">
+            <StackPanel Spacing="8" IsEnabled="{Binding Settings.HotEdgeEnabled}">
+              <TextBlock Classes="row-title" Text="{Binding Loc[row.hotedge.corner]}" />
+              <UniformGrid Columns="2" Width="96" HorizontalAlignment="Left">
+                <RadioButton GroupName="HotCorner" Margin="2" Padding="6"
+                             HorizontalContentAlignment="Center"
+                             ToolTip.Tip="Top-left"
+                             IsChecked="{Binding Settings.HotEdgeCorner, Converter={StaticResource EnumMatch}, ConverterParameter=TopLeft}">
+                  <Viewbox Width="22" Height="22">
+                    <Canvas Width="16" Height="16">
+                      <Path Stroke="{DynamicResource TextBrush}" StrokeThickness="2.2"
+                            StrokeLineCap="Round" StrokeJoin="Round" Fill="Transparent"
+                            Data="M3,11 V3 H11" />
+                    </Canvas>
+                  </Viewbox>
+                </RadioButton>
+                <RadioButton GroupName="HotCorner" Margin="2" Padding="6"
+                             HorizontalContentAlignment="Center"
+                             ToolTip.Tip="Top-right"
+                             IsChecked="{Binding Settings.HotEdgeCorner, Converter={StaticResource EnumMatch}, ConverterParameter=TopRight}">
+                  <Viewbox Width="22" Height="22">
+                    <Canvas Width="16" Height="16">
+                      <Path Stroke="{DynamicResource TextBrush}" StrokeThickness="2.2"
+                            StrokeLineCap="Round" StrokeJoin="Round" Fill="Transparent"
+                            Data="M13,11 V3 H5" />
+                    </Canvas>
+                  </Viewbox>
+                </RadioButton>
+                <RadioButton GroupName="HotCorner" Margin="2" Padding="6"
+                             HorizontalContentAlignment="Center"
+                             ToolTip.Tip="Bottom-left"
+                             IsChecked="{Binding Settings.HotEdgeCorner, Converter={StaticResource EnumMatch}, ConverterParameter=BottomLeft}">
+                  <Viewbox Width="22" Height="22">
+                    <Canvas Width="16" Height="16">
+                      <Path Stroke="{DynamicResource TextBrush}" StrokeThickness="2.2"
+                            StrokeLineCap="Round" StrokeJoin="Round" Fill="Transparent"
+                            Data="M3,5 V13 H11" />
+                    </Canvas>
+                  </Viewbox>
+                </RadioButton>
+                <RadioButton GroupName="HotCorner" Margin="2" Padding="6"
+                             HorizontalContentAlignment="Center"
+                             ToolTip.Tip="Bottom-right"
+                             IsChecked="{Binding Settings.HotEdgeCorner, Converter={StaticResource EnumMatch}, ConverterParameter=BottomRight}">
+                  <Viewbox Width="22" Height="22">
+                    <Canvas Width="16" Height="16">
+                      <Path Stroke="{DynamicResource TextBrush}" StrokeThickness="2.2"
+                            StrokeLineCap="Round" StrokeJoin="Round" Fill="Transparent"
+                            Data="M13,5 V13 H5" />
+                    </Canvas>
+                  </Viewbox>
+                </RadioButton>
+              </UniformGrid>
               <TextBlock Classes="row-title" Text="{Binding Loc[row.hotedge.delay]}" />
               <Grid ColumnDefinitions="*,Auto">
                 <Slider Minimum="0.05" Maximum="2" TickFrequency="0.05" IsSnapToTickEnabled="True"
@@ -347,8 +444,48 @@
             <StackPanel Spacing="4">
               <TextBlock Classes="row-title" Text="{Binding Loc[row.exclude]}" />
               <TextBlock Classes="row-hint" Text="{Binding Loc[hint.exclude]}" />
+              <Button x:Name="ExcludePickButton"
+                      Content="{Binding Loc[btn.exclude.pick]}"
+                      HorizontalAlignment="Left" Padding="12,6" Margin="0,2,0,4">
+                <Button.Flyout>
+                  <Flyout Placement="BottomEdgeAlignedLeft">
+                    <Border Padding="12" MinWidth="260" MaxWidth="340">
+                      <StackPanel Spacing="8">
+                        <ScrollViewer MaxHeight="220" IsVisible="{Binding HasSourceAppChoices}">
+                          <ItemsControl ItemsSource="{Binding SourceAppChoices}">
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate>
+                                <CheckBox Content="{Binding Name}" IsChecked="{Binding IsSelected}"
+                                          Margin="0,2" HorizontalAlignment="Stretch" />
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                        </ScrollViewer>
+                        <TextBlock Text="{Binding Loc[exclude.empty]}"
+                                   FontSize="12" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   IsVisible="{Binding !HasSourceAppChoices}" />
+                        <Button Content="{Binding Loc[btn.exclude.pick.done]}"
+                                HorizontalAlignment="Right" Padding="14,6"
+                                Classes="accent" Click="ExcludePickDone_Click"
+                                IsVisible="{Binding HasSourceAppChoices}" />
+                      </StackPanel>
+                    </Border>
+                  </Flyout>
+                </Button.Flyout>
+              </Button>
               <TextBox AcceptsReturn="True" TextWrapping="Wrap" Height="64"
                        Text="{Binding Settings.ExcludedApps}" />
+              <Grid ColumnDefinitions="*,Auto" Margin="0,6,0,0">
+                <TextBlock Text="{Binding Loc[row.exclude.hide]}"
+                           VerticalAlignment="Center" TextWrapping="Wrap"
+                           Margin="0,0,8,0" />
+                <ToggleSwitch Grid.Column="1"
+                              IsChecked="{Binding Settings.HideExcludedAppHistory}" />
+              </Grid>
+              <TextBlock Text="{Binding Loc[hint.exclude.hide]}"
+                         FontSize="11.5" TextWrapping="Wrap"
+                         Foreground="{DynamicResource TextMutedBrush}" />
             </StackPanel>
           </StackPanel>
         </Border>

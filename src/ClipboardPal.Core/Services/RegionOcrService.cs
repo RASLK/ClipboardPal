@@ -22,19 +22,22 @@ public sealed class RegionOcrService
     private readonly HistoryStore _store;
     private readonly MainViewModel _main;
     private readonly IUiDispatcher _dispatcher;
+    private readonly ILocalizationService _l10n;
 
     public RegionOcrService(
         IOcrService ocr,
         IClipboardWatcher clipboard,
         HistoryStore store,
         MainViewModel main,
-        IUiDispatcher dispatcher)
+        IUiDispatcher dispatcher,
+        ILocalizationService l10n)
     {
         _ocr = ocr;
         _clipboard = clipboard;
         _store = store;
         _main = main;
         _dispatcher = dispatcher;
+        _l10n = l10n;
     }
 
     /// <param name="item">The card whose picture was cropped, updated with the result.</param>
@@ -44,6 +47,17 @@ public sealed class RegionOcrService
         byte[] croppedPng,
         CancellationToken cancellationToken = default)
     {
+        if (croppedPng.Length == 0)
+        {
+            var empty = _l10n["ocr.error.failed"];
+            _dispatcher.Post(() =>
+            {
+                item.OcrStatus = OcrStatus.Failed;
+                item.OcrError = empty;
+            });
+            return RegionOcrOutcome.Failed(empty);
+        }
+
         _dispatcher.Post(() => item.OcrStatus = OcrStatus.Running);
 
         // The engines read from disk, and the crop is not worth keeping around afterwards.
@@ -57,13 +71,16 @@ public sealed class RegionOcrService
             if (string.IsNullOrWhiteSpace(text))
             {
                 var failed = result.Outcome is OcrOutcome.EngineUnavailable or OcrOutcome.Failed;
+                var error = failed
+                    ? (string.IsNullOrWhiteSpace(result.Error) ? _l10n["ocr.error.failed"] : result.Error)
+                    : _l10n["ocr.error.noText"];
                 _dispatcher.Post(() =>
                 {
                     item.OcrStatus = failed ? OcrStatus.Failed : OcrStatus.NoText;
-                    item.OcrError = result.Error;
+                    item.OcrError = failed ? error : null;
                 });
                 return failed
-                    ? RegionOcrOutcome.Failed(result.Error ?? "recognition failed")
+                    ? RegionOcrOutcome.Failed(error)
                     : RegionOcrOutcome.Done(null);
             }
 

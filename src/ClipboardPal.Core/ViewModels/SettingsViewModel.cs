@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Reflection;
 using ClipboardPal.Core.Abstractions;
 using ClipboardPal.Core.Models;
@@ -25,6 +26,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "2.0.0";
 
     public string AppVersionFull => $"v{AppVersion}";
+
+    public ObservableCollection<SelectableSourceApp> SourceAppChoices { get; } = [];
 
     [ObservableProperty]
     private string _hotkeyDisplay = string.Empty;
@@ -64,7 +67,56 @@ public sealed partial class SettingsViewModel : ObservableObject
                 HotkeyDisplay = Settings.Hotkey.ToString();
             if (e.PropertyName == nameof(AppSettings.LaunchAtLogin))
                 _autostart.SetEnabled(Settings.LaunchAtLogin);
+            if (e.PropertyName == nameof(AppSettings.ExcludedApps))
+                RefreshSourceAppChoices();
         };
+    }
+
+    /// <summary>
+    /// Rebuilds the distinct source-app list for the exclusions picker (from history + trash).
+    /// Apps already on the exclusion list are left out - re-adding them is pointless.
+    /// </summary>
+    public void RefreshSourceAppChoices()
+    {
+        var excluded = new HashSet<string>(Settings.ExcludedProcessNames(), StringComparer.OrdinalIgnoreCase);
+
+        var apps = _main.Items
+            .Concat(_main.TrashItems)
+            .Select(static i => i.SourceApp)
+            .Where(static s => !string.IsNullOrWhiteSpace(s))
+            .Select(static s => s!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static s => s, StringComparer.OrdinalIgnoreCase)
+            .Where(name => !excluded.Contains(NormalizeProcessName(name)))
+            .ToList();
+
+        SourceAppChoices.Clear();
+        foreach (var app in apps)
+            SourceAppChoices.Add(new SelectableSourceApp(app));
+
+        OnPropertyChanged(nameof(HasSourceAppChoices));
+    }
+
+    public bool HasSourceAppChoices => SourceAppChoices.Count > 0;
+
+    /// <summary>Adds every checked app in <see cref="SourceAppChoices"/> to the exclusion list at once.</summary>
+    [RelayCommand]
+    private void AddSelectedSourceApps()
+    {
+        var selected = SourceAppChoices.Where(static a => a.IsSelected).Select(static a => a.Name).ToList();
+        if (selected.Count == 0)
+            return;
+
+        var current = Settings.ExcludedApps;
+        foreach (var name in selected)
+        {
+            var normalized = NormalizeProcessName(name);
+            if (Settings.ExcludedProcessNames().Contains(normalized))
+                continue;
+            current = AppendExcluded(current, name);
+        }
+
+        Settings.ExcludedApps = current;
     }
 
     [RelayCommand]
@@ -85,11 +137,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     private void CancelHotkeyCapture()
     {
         _hotkeys.EndCapture();
-        if (IsCapturingHotkey)
-        {
-            IsCapturingHotkey = false;
-            HotkeyDisplay = Settings.Hotkey.ToString();
-        }
+        IsCapturingHotkey = false;
+        HotkeyDisplay = Settings.Hotkey.ToString();
     }
 
     [RelayCommand]
@@ -161,4 +210,22 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     public async Task SaveAsync() => await _settingsService.SaveAsync();
+
+    private static string NormalizeProcessName(string name)
+    {
+        var s = name.Trim();
+        if (s.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            s = s[..^4];
+        return s.ToLowerInvariant();
+    }
+
+    private static string AppendExcluded(string current, string app)
+    {
+        if (string.IsNullOrWhiteSpace(current))
+            return app;
+
+        var trimmed = current.TrimEnd();
+        var sep = trimmed.Contains('\n') || trimmed.Contains('\r') ? "\n" : ", ";
+        return trimmed + sep + app;
+    }
 }

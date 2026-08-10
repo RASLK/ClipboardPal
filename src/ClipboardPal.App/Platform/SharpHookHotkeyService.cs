@@ -162,26 +162,36 @@ public sealed class SharpHookHotkeyService : IGlobalHotkeyService, IPointerTrack
         if (IsModifier(key))
             return;
 
-        HotkeySpec? spec = null;
-        if (key != KeyCode.VcEscape)
+        // Esc always cancels capture and restores the previous hotkey (null callback arg).
+        if (key == KeyCode.VcEscape)
         {
-            spec = new HotkeySpec
-            {
-                Meta = IsMetaDown(),
-                Shift = IsDown(KeyCode.VcLeftShift) || IsDown(KeyCode.VcRightShift),
-                Ctrl = IsDown(KeyCode.VcLeftControl) || IsDown(KeyCode.VcRightControl),
-                Alt = IsDown(KeyCode.VcLeftAlt) || IsDown(KeyCode.VcRightAlt),
-                KeyName = FromKeyCode(key)
-            };
-            if (!spec.HasModifier)
-                return;
+            CompleteCapture(null);
+            return;
         }
 
+        var spec = new HotkeySpec
+        {
+            Meta = IsMetaDown(),
+            Shift = IsDown(KeyCode.VcLeftShift) || IsDown(KeyCode.VcRightShift),
+            Ctrl = IsDown(KeyCode.VcLeftControl) || IsDown(KeyCode.VcRightControl),
+            Alt = IsDown(KeyCode.VcLeftAlt) || IsDown(KeyCode.VcRightAlt),
+            KeyName = FromKeyCode(key)
+        };
+        if (!spec.HasModifier)
+            return;
+
+        if (spec.Meta)
+            NeutralizeMetaIfNeeded();
+        CompleteCapture(spec);
+    }
+
+    private void CompleteCapture(HotkeySpec? spec)
+    {
         var callback = _capture;
         _capture = null;
-        if (spec?.Meta == true)
-            NeutralizeMetaIfNeeded();
-        _dispatcher.Post(() => callback?.Invoke(spec));
+        if (callback is null)
+            return;
+        _dispatcher.Post(() => callback(spec));
     }
 
     private void UpdateChord()
